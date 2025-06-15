@@ -1,30 +1,57 @@
+# ===============================
+# 라이브러리 임포트
+# ===============================
+from matplotlib.dates import DateFormatter
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
-from shared import train
-from shiny import App, render, ui
+from shiny import App, render, ui, reactive
 import matplotlib as mpl
 from matplotlib import font_manager
 from pathlib import Path
 from shinywidgets import output_widget, render_widget
 import tempfile
+from shared import streaming_df, train
 
-# Windows에서 한글 폰트 설정 (예: 맑은 고딕)
-mpl.rcParams['font.family'] = 'Malgun Gothic'
+# ===============================
+# 한글 폰트 설정, 마이너스 깨짐 방지
+# ===============================
+mpl.rcParams["font.family"] = "Malgun Gothic"
+mpl.rcParams["axes.unicode_minus"] = False
 
-# 마이너스 깨짐 방지
-mpl.rcParams['axes.unicode_minus'] = False
 
-# 1. 데이터 전처리
-train['측정일시'] = pd.to_datetime(train['측정일시'])
-train['월'] = train['측정일시'].dt.month
-
-# 2. 요약 지표 계산
+# 1. 요약 지표 계산
 total_usage_val = train['전력사용량(kWh)'].sum()
 total_cost_val = train['전기요금(원)'].sum()
 avg_unit_price_val = total_cost_val / total_usage_val if total_usage_val > 0 else 0
 peak_month_val = train.groupby('월')['전기요금(원)'].sum().idxmax()
 
+
+
+# ===============================
+# 실시간 스트리머 클래스 정의
+# ===============================
+class SimpleStreamer:
+    def __init__(self, streaming_df):
+        self.streaming_df = streaming_df.reset_index(drop=True)
+        self.idx = 0
+        self.current = pd.DataFrame(columns=streaming_df.columns)
+
+    def get_next(self, n=1):
+        if self.idx >= len(self.streaming_df):
+            return None
+        next_chunk = self.streaming_df.iloc[self.idx : self.idx + n]
+        self.idx += n
+        self.current = pd.concat([self.current, next_chunk], ignore_index=True) \
+            if not self.current.empty else next_chunk
+        return next_chunk
+
+    def get_data(self):
+        return self.current.copy()
+
+    def reset(self):
+        self.idx = 0
+        self.current = pd.DataFrame(columns=self.streaming_df.columns)
 
 
 
@@ -36,16 +63,13 @@ from pathlib import Path
 from shiny import ui
 
 app_ui = ui.TagList(
-    # 1. CSS 먼저 포함
     ui.include_css(Path(__file__).parent / "styles.css"),
 
-    # 2. 페이지 전체를 page_navbar로 정의
     ui.page_navbar(
         # [탭1] 1~11월 전기요금 분석
         ui.nav_panel(
             "1~11월 전기요금 분석",
 
-            # A. 요약 카드
             ui.input_date_range("기간", "기간 선택", start="2024-01-01", end="2024-11-30"),
             ui.layout_column_wrap(
                 ui.card("총 전력 사용량 (kWh)", ui.output_text("range_usage")),
@@ -57,7 +81,6 @@ app_ui = ui.TagList(
             ),
             ui.hr(),
 
-            # B + C
             ui.layout_columns(
                 ui.card(
                     ui.h4("[B] 전력 사용량 및 전기요금 추이 (분석 단위별)"),
@@ -75,44 +98,86 @@ app_ui = ui.TagList(
             ),
             ui.hr(),
 
-            # D + E
-
-            # E 작업유형별 시각화
             ui.layout_columns(
                 ui.card(
                     ui.h4("[D]월별 작업유형별 전력 사용량 (matplotlib)"),
-
-            #  월 선택 드롭다운: 딱 여기!
-            ui.input_select(
-                "selected_month", "월 선택",
-                choices=[str(m) for m in sorted(train['월'].unique())],
-                selected="1"
-            ),
-
+                    ui.input_select(
+                        "selected_month", "월 선택",
+                        choices=[str(m) for m in sorted(train['월'].unique())],
+                        selected="1"
+                    ),
                     ui.output_image("usage_by_type_matplotlib")
                 ),
                 ui.card(
                     ui.h4("[E] 선택 월의 작업유형별 분포"),
-                    ui.input_select(  
+                    ui.input_select(
                         "selected_day", "요일 선택",
                         choices=["월", "화", "수", "목", "금", "토", "일"],
                         selected="월"
                     ),
                     ui.output_image("usage_by_dayofweek_matplotlib"),
-                    ui.output_image("usage_by_hour_matplotlib")                    
-                
-                ),
-            ),  
+                    ui.output_image("usage_by_hour_matplotlib")
+                )
+            )
         ),
 
         # [탭2] 12월 예측 및 모델 근거
-        ui.nav_panel("12월 예측 및 모델 근거"),
+        ui.nav_panel(
+            "12월 예측 및 모델 근거",
 
-        # 기본 설정
+            ui.layout_columns(
+                ui.input_action_button("start_btn", "시작"),
+                ui.input_action_button("stop_btn", "멈춤"),
+                ui.input_action_button("reset_btn", "리셋"),
+                ui.input_radio_buttons(
+                    "time_unit", "시간 단위 선택",
+                    choices=["일별", "시간대별", "분별(15분)"],
+                    selected="분별(15분)",
+                    inline=True
+                ),
+                ui.output_text("stream_status")
+            ),
+            ui.hr(),
+
+            ui.layout_columns(
+                ui.card(
+                    ui.h5("[A] 12월 실시간 요금"),
+                    ui.output_ui("card_a"),
+                    # style="height:220px"
+                ),
+                ui.card(
+                    ui.h5("[B] 전 기간과 비교"),
+                    ui.output_ui("card_b"),
+                    # style="height:220px"
+                ),
+                col_widths=[8, 4]
+            ),
+            ui.hr(),
+
+            ui.layout_columns(
+                ui.card(
+                    ui.card_header("[C] 12월 실시간 전기요금 현황"),
+                    
+                    # ▶ 실시간 그래프 + 실시간 카드
+                    ui.div(
+                        # 좌측: 실시간 그래프
+                        ui.div(ui.output_plot("live_plot", height="500px"), class_="flex-fill me-3"),
+                        # 우측: 실시간 카드
+                        ui.div(ui.output_ui("latest_info_cards"), class_="flex-fill"),
+                        class_="d-flex align-items-start"
+                    ),
+                )
+            ),
+
+        ),
+
+        # page_navbar 옵션
         title="피카피카",
         id="page"
     )
 )
+
+
 
 
 
@@ -510,6 +575,261 @@ def server(input, output, session):
         tmpfile.close()
         return {"src": tmpfile.name, "alt": "시간대별 작업유형별 전력사용량"}
 
+
+
+
+# ===============================
+# TAB2 서버 로직
+# ===============================
+    streamer = reactive.Value(SimpleStreamer(streaming_df))
+    is_streaming = reactive.Value(False)
+
+    def transform_time(streaming_df, time_unit):
+        streaming_df = streaming_df.copy()
+
+        # 시간 단위별로 데이터를 변환하는 함수 (일별, 시간대별, 15분 단위)
+        if time_unit == "일별":
+            streaming_df["단위"] = streaming_df["측정일시"].dt.floor("D")
+        elif time_unit == "시간대별":
+            streaming_df["단위"] = streaming_df["측정일시"].dt.floor("H")
+        elif time_unit == "분별(15분)":
+            streaming_df["단위"] = streaming_df["측정일시"].dt.floor("15min")
+        else:
+            streaming_df["단위"] = streaming_df["측정일시"]
+
+        return streaming_df
+
+    # 스트리밍 시작, 멈춤, 리셋 버튼
+    @reactive.Effect
+    @reactive.event(input.start_btn)
+    def start_stream():
+        is_streaming.set(True)
+
+    @reactive.Effect
+    @reactive.event(input.stop_btn)
+    def stop_stream():
+        is_streaming.set(False)
+
+    @reactive.Effect
+    @reactive.event(input.reset_btn)
+    def reset_stream():
+        is_streaming.set(False)
+        streamer.get().reset()
+    # 3초마다 1줄씩 데이터 추가하는 스트리밍 로직
+    @reactive.Effect
+    def auto_stream():
+        if not is_streaming.get():
+            return
+        reactive.invalidate_later(3)
+        next_row = streamer.get().get_next(1)
+        if next_row is None:
+            is_streaming.set(False)
+
+     # 스트리밍 상태 텍스트 출력 ("스트리밍 중" 또는 "중지")
+    @output
+    @render.text
+    def stream_status():
+        return "스트리밍 중" if is_streaming.get() else "중지"
+    
+    ################################
+    # [A] 실시간 전기요금 추이 그래프 출력
+    ################################
+    @output
+    @render.ui
+    def card_a():
+        return ui.div(
+            ui.layout_column_wrap(
+                ui.card(
+                    "실시간 누적 요금",
+                    ui.output_text("realtime_total_cost"),  # 실시간 누적요금
+                    style="background-color:#003D7C; color:white;"
+                ),
+                ui.card(
+                    "31일 기준 예상 요금",
+                    ui.output_text("estimated_total_cost"),  # 예상 누적요금
+                    style="background-color:#e0e0e0;"
+                ),
+                width=1/2
+            ),
+            ui.hr(),
+            ui.tags.div(
+                ui.tags.b("12월 진행률"),
+                ui.output_ui("december_progress_bar")  # 진행률 바
+            )
+        )
+    
+    @output
+    @render.text
+    def realtime_total_cost():
+        reactive.invalidate_later(3)
+        df = streamer.get().get_data()
+        if df.empty:
+            return "-"
+        df["날짜"] = df["측정일시"].dt.date
+        df_day = df.groupby("날짜")["예측_전기요금"].sum().reset_index(name="당일요금")
+        df_day["누적요금"] = df_day["당일요금"].cumsum()
+        today = df_day["날짜"].max()
+        current_total = df_day[df_day["날짜"] == today]["누적요금"].values[0]
+        return f"{current_total:,.0f} 원"
+    
+    @output
+    @render.text
+    def estimated_total_cost():
+        reactive.invalidate_later(3)
+        df = streamer.get().get_data()
+        if df.empty:
+            return "-"
+        df["날짜"] = df["측정일시"].dt.date
+        df_day = df.groupby("날짜")["예측_전기요금"].sum().reset_index(name="당일요금")
+        df_day["누적요금"] = df_day["당일요금"].cumsum()
+        today = df_day["날짜"].max()
+        start_date = pd.to_datetime("2024-12-01").date()
+        days_elapsed = (today - start_date).days + 1
+        current_total = df_day[df_day["날짜"] == today]["누적요금"].values[0]
+        estimated_total = current_total * 31 / days_elapsed
+        return f"{estimated_total:,.0f} 원"
+    
+    @output
+    @render.ui
+    def december_progress_bar():
+        reactive.invalidate_later(3)
+        df = streamer.get().get_data()
+        if df.empty:
+            return ui.div("진행률 없음", class_="text-muted")
+        df["날짜"] = df["측정일시"].dt.date
+        today = df["날짜"].max()
+        start_date = pd.to_datetime("2024-12-01").date()
+        total_days = 31
+        days_elapsed = (today - start_date).days + 1
+        progress_ratio = int((days_elapsed / total_days) * 100)
+        return ui.div(
+            ui.tags.progress(value=progress_ratio, max=100, style="width:100%"),
+            f"{days_elapsed}일 경과 / 총 {total_days}일 ({progress_ratio}%)"
+        )
+
+    # @output
+    # @render.ui
+    # def card_a():
+    #     reactive.invalidate_later(3)
+    #     streaming_df = streamer.get().get_data()
+
+    #     if streaming_df.empty:
+    #         return ui.div("데이터 없음", class_="text-muted")
+
+    #     # 날짜별 누적 요금 계산
+    #     streaming_df["날짜"] = streaming_df["측정일시"].dt.date
+    #     df_day = streaming_df.groupby("날짜")["예측_전기요금"].sum().reset_index(name="당일요금")
+    #     df_day["누적요금"] = df_day["당일요금"].cumsum()
+
+    #     # 날짜 및 진행률 계산
+    #     today = df_day["날짜"].max()
+    #     start_date = pd.to_datetime("2024-12-01").date()
+    #     end_date = pd.to_datetime("2024-12-31").date()
+    #     days_elapsed = (today - start_date).days + 1
+    #     total_days = (end_date - start_date).days + 1
+    #     progress_ratio = int((days_elapsed / total_days) * 100)
+
+    #     # 누적 요금 및 예측 총 요금
+    #     current_total = df_day[df_day["날짜"] == today]["누적요금"].values[0]
+    #     estimated_total = current_total * total_days / days_elapsed
+
+    #     # UI 출력
+    #     return ui.div(
+    #         ui.layout_column_wrap(
+    #             ui.card("실시간 누적 요금", f"{current_total:,.0f} 원", style="background-color:#003D7C; color:white;"),
+    #             ui.card("31일 기준 예상 요금", f"{estimated_total:,.0f} 원", style="background-color:#e0e0e0;"),
+    #             width=1/2
+    #         ),
+    #         ui.hr(),
+    #         ui.tags.div(
+    #             ui.tags.b("12월 진행률"),
+    #             ui.tags.progress(value=progress_ratio, max=100, style="width:100%"),
+    #             f"{days_elapsed}일 경과 / 총 31일 ({progress_ratio}%)"
+    #         )
+    #     )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+    ################################
+    # [C] 실시간 전기요금 추이 그래프 출력
+    ################################
+    @output
+    @render.plot
+    def live_plot():
+        reactive.invalidate_later(3)
+        streaming_df = streamer.get().get_data()
+        fig, ax = plt.subplots()
+
+        if streaming_df.empty:
+            ax.text(0.5, 0.5, "시작 버튼을 눌러 데이터를 로드해주세요", ha="center", va="center", fontsize=14, color="gray")
+            ax.axis("off")
+            return fig
+
+        time_unit = input.time_unit()
+        streaming_df = transform_time(streaming_df, time_unit)
+        grouped = streaming_df.groupby("단위")["예측_전기요금"].mean().reset_index()
+
+        # X축 포맷 지정
+        if time_unit == "일별":
+            formatter = DateFormatter("%Y-%m-%d")
+            xticks = sorted(grouped["단위"].drop_duplicates())
+        elif time_unit == "시간대별":
+            formatter = DateFormatter("%Y-%m-%d %H시")
+            xticks = sorted(grouped["단위"].drop_duplicates())
+        elif time_unit == "분별(15분)":
+            formatter = DateFormatter("%Y-%m-%d %H:%M")
+            xticks = grouped["단위"]  # 그대로 사용
+        else:
+            formatter = DateFormatter("%Y-%m-%d %H:%M")
+            xticks = grouped["단위"]
+
+        ax.plot(grouped["단위"], grouped["예측_전기요금"], marker="o", linestyle="-")
+        ax.set_title("전기요금 실시간 추이")
+        ax.set_xlabel("시간 단위")
+        ax.set_ylabel("예측 전기요금(원)")
+        ax.set_xticks(xticks)
+        ax.xaxis.set_major_formatter(formatter)
+        fig.autofmt_xdate()
+        fig.tight_layout()
+        return fig
+
+
+    # 최신 행 기준 작업유형과 예측요금을 카드 형태로 출력
+    @output
+    @render.ui
+    def latest_info_cards():
+        reactive.invalidate_later(3)
+        streaming_df = streamer.get().get_data()
+        if streaming_df.empty:
+            return ui.div("데이터 없음", class_="text-muted")
+
+        latest = streaming_df.iloc[-1]
+        작업유형 = latest.get("작업유형", "N/A")
+        요금 = latest.get("예측_전기요금", "N/A")
+
+        return ui.div(
+            ui.card(
+                ui.card_header("작업유형"),
+                ui.h4(str(작업유형), class_="fw-bold text-center")
+            ),
+            ui.card(
+                ui.card_header("전기요금"),
+                ui.h4(f"{요금:,.0f} 원" if pd.notna(요금) else "N/A", class_="fw-bold text-center")
+            ),
+            style="display: flex; flex-direction: column; gap: 1rem;"
+        )
 
 
 
