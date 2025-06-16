@@ -93,6 +93,60 @@ app_ui = ui.TagList(
             ),
             ui.hr(),
 
+
+            ui.card(
+                ui.card_header("요금 중심 마인드맵"),
+                ui.layout_columns(
+                    # ────── 좌측: Mermaid 마인드맵 ──────
+                    ui.HTML("""
+                    <div style="padding: 16px;">
+                        <div class="mermaid" style="font-size: 30px;">
+                        flowchart TD
+                            D["지상 무효전력량(kVarh)"] --> Q(("Q: 무효전력량(kVarh)"))
+                            E["진상무효전력량(kVarh)"] --> Q
+
+                            Q --> F[지상/진상 역률]
+                            B(["P: 전력사용량(kWh)"]) --> F["지상/진상 역률(%)"]
+                            F -.->|역률에 따른 추가 요금 부과|A[전기요금]
+
+                            B -->|회귀계수: 107.25| A["전기요금(원)"]
+                            B --> C["탄소배출량(tCO2)"]
+                            C --> A
+                        </div>
+                    </div>
+
+                    <script type="module">
+                    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+                    mermaid.initialize({ startOnLoad: true });
+                    </script>
+                    """),
+
+                    # ────── 우측: 설명 ──────
+                    ui.HTML("""
+                    <div style="font-size: 16px; padding: 16px;">
+                        <br><br><br>
+                        <strong>전력 관계식</strong>
+                        <ul>
+                        <li><strong>피상전력 관계식:</strong> S² = P² + Q²  
+                            피상전력(S)은 유효전력(P)과 무효전력(Q)의 벡터 합으로, 전기설비가 실제로 부담하는 전체 전력량을 나타냅니다.</li><br>
+                        
+                        <li><strong>역률(Power Factor):</strong> 역률 = P / S  
+                            유효전력이 전체 피상전력에서 차지하는 비율로, 1에 가까울수록 전력 사용이 효율적입니다.  
+                            역률이 낮을수록 무효전력 비중이 높아져, 산업용 설비에서는 벌금 또는 기본요금 증가로 이어질 수 있습니다.</li><br>
+                        
+                        <li><strong>지상과 진상은 동시에 성립하지 않음:</strong>  
+                            지상무효전력은 유도성 부하에서, 진상무효전력은 용량성 부하에서 발생하므로  
+                            특정 시점에는 두 중 하나만 발생합니다. 전류가 전압보다 늦을 때는 지상, 빠를 때는 진상 상태입니다.</li><br>
+                        </ul>
+                    </div>
+                    """),
+
+                    col_widths=[6, 6]
+                )
+            ),
+            ui.hr(),
+
+
             ui.layout_columns(
                 ui.card(
                     ui.card_header("[B] 전력 사용량 및 전기요금 추이 (분석 단위별)"),
@@ -309,10 +363,11 @@ def server(input, output, session):
             grouped = df.groupby(['단위', '작업유형'])[['전력사용량(kWh)', '전기요금(원)']].sum().reset_index()
 
             colors = {
-                'Light_Load': 'skyblue',
-                'Medium_Load': 'orange',
-                'Maximum_Load': 'crimson'
+                "Light_Load": "#B3D7FF",     # 밝은 파랑 (color-primary의 파스텔톤)
+                "Medium_Load": "#FFEB99",    # 머스터드 옐로우 (color-accent 계열)
+                "Maximum_Load": "#FF9999"    # 연한 빨강 (color-danger 계열)
             }
+            
             hours = np.arange(0, 24)
             fig, ax1 = plt.subplots()
             ax2 = ax1.twinx()
@@ -517,62 +572,68 @@ def server(input, output, session):
     @render.image
     def usage_by_type_matplotlib():
         selected_month = int(input.selected_month())
-        # 월-작업유형별 피벗
+
+        # ① 피벗
         monthly = train.groupby(['월', '작업유형'])['전력사용량(kWh)'].sum().unstack().fillna(0)
+
+        # ② 순서를 명시적으로 고정
+        order = ['Light_Load', 'Medium_Load', 'Maximum_Load']
+        monthly = monthly[order]  # 컬럼 순서 재정렬
+
+        # ③ 색상 매핑도 순서에 맞게
+        color_map = {
+            'Light_Load': '#B3D7FF',
+            'Medium_Load': '#FFEB99',
+            'Maximum_Load': '#FF9999'
+        }
+
         months = monthly.index.tolist()
-        fig, ax = plt.subplots(figsize=(8, 4))
+        fig, ax = plt.subplots(figsize=(7, 6))
         bottom = np.zeros(len(months))
-        colors = ['#FFD700', '#FF6347', '#DB7093']
 
-        total_usage = monthly.values.sum()  # 전체 사용량
-
-
-        for idx, col in enumerate(monthly.columns):
+        for col in order:
             y = monthly[col].values
             for i, m in enumerate(months):
-                month_total = monthly.iloc[i].sum()  # 현재 월의 전체 사용량
+                month_total = monthly.iloc[i].sum()
                 ratio = (y[i] / month_total * 100) if month_total > 0 else 0
-                edgecolor = 'royalblue' if m == int(input.selected_month()) else 'gray'
-                linewidth = 3 if m == int(input.selected_month()) else 1
-                alpha = 1 if m == int(input.selected_month()) else 0.4
+                edgecolor = 'royalblue' if m == selected_month else 'gray'
+                linewidth = 3 if m == selected_month else 1
+                alpha = 1 if m == selected_month else 0.4
                 ax.bar(
                     m, y[i],
                     bottom=bottom[i],
-                    color=colors[idx],
+                    color=color_map[col],
                     edgecolor=edgecolor,
                     linewidth=linewidth,
                     alpha=alpha,
-                    label=col if i == 0 else ""
+                    label=col if i == 0 else ""  # 범례 중복 방지
                 )
-                # 바 위에 값+비율 표기
                 if y[i] > 0:
                     ax.text(
-                        m, bottom[i] + y[i] / 2,
-                        f"{int(y[i]):,}\n({ratio:.1f}%)",  # ← 월별 비율
+                        m, bottom[i] + y[i]/2,
+                        f"{int(y[i]):,}\n({ratio:.1f}%)",
                         ha='center', va='center',
                         fontsize=8,
                         fontweight='normal',
-                        color='black' if m == int(input.selected_month()) else 'dimgray'
+                        color='black' if m == selected_month else 'dimgray'
                     )
             bottom += y
 
         ax.set_title('월별 작업유형별 전력 사용량 (Stacked Bar)')
         ax.set_xlabel('월')
         ax.set_ylabel('전력사용량 (kWh)')
+        ax.set_xticks(months)
+        ax.set_xticklabels([str(m) for m in months])
         ax.legend(title='작업유형')
-        ax.set_xticks(months) 
-        ax.set_xticklabels([str(m) for m in months]) 
-        plt.tight_layout()
+        fig.tight_layout()
 
-         # temp 파일로 저장 후 경로 리턴!
         tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
         plt.savefig(tmpfile, format="png")
         plt.close(fig)
         tmpfile.close()
-        return {
-            "src": tmpfile.name,  # 경로!
-            "alt": "월별 작업유형별 전력사용량 (matplotlib)"
-        }
+
+        return {"src": tmpfile.name, "alt": "월별 작업유형별 전력사용량 (matplotlib)"}
+
 
  
 
