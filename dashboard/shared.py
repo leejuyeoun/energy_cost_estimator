@@ -12,7 +12,7 @@ test = pd.read_csv(app_dir / "./data/test.csv")
 
 streaming_df = pd.read_csv(app_dir / "./data/streaming_df.csv")
 streaming_df.columns = streaming_df.columns.str.strip()  # 공백 제거
-streaming_df = streaming_df.rename(columns={"작업유형": "작업유형", "예측_전기요금": "예측_전기요금"})
+streaming_df = streaming_df.rename(columns={"작업유형": "작업유형", "예측_전기요금": "예측_전기요금", "예측_전력사용량" : "예측_전력사용량"})
 streaming_df["측정일시"] = pd.to_datetime(streaming_df["측정일시"])
 
 

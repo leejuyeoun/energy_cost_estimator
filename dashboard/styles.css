@@ -1,16 +1,20 @@
-/* ===============================
- 1. 기본 설정 (Base Styles)
-=============================== */
 :root {
-  --color-bg: #F2F4F6;              /* 전체 배경 - 밝은 회색 */
-  --color-card: #FFFFFF;            /* 카드 배경 - 흰색 */
-  --color-border: #D1D9E6;          /* 카드 테두리 - 흐린 회색 */
-  --color-text: #222B45;            /* 기본 텍스트 - 진회색 */
-  --color-subtext: #6E7687;         /* 서브 텍스트 - 연회색 */
-  --color-primary: #003D7C;         /* LS 블루 - 핵심 강조 */
-  --color-accent: #ED1C24;          /* LS 레드 - 경고, 포인트 */
-  --color-danger: #B71C1C;          /* 위험 알림 - 진한 빨강 */
-  --color-success: #2E7D32;         /* 성공 알림 - 진한 초록 */
+  --color-bg: #F2F4F6;
+  --color-card: #FFFFFF;
+  --color-border: #D1D9E6;
+  --color-text: #222B45;
+  --color-subtext: #6E7687;
+
+  --color-primary: #4A90E2;         /* 주요 포인트 - 버튼/제목 등 */
+  --color-primary-bg: #EAF3FB;      /* 파스텔 블루 배경 (테이블, 카드 배경용) */
+  --color-accent: #ED1C24;          /* 예측 전기요금 라인 (빨강) */
+  --color-warning: #FFEB99;         /* Medium_Load 파스텔 노랑 */
+  --color-danger-soft: #FF9999;     /* Maximum_Load 연한 빨강 */
+  --color-success: #81C784;         /* 연한 초록 */
+
+  --color-load-light: #B3D7FF;      /* Light_Load 파스텔 블루 */
+  --color-load-medium: #FFEB99;     /* Medium_Load */
+  --color-load-maximum: #FF9999;    /* Maximum_Load */
 }
 
 body {
@@ -22,9 +26,7 @@ body {
   padding: 0;
 }
 
-/* ===============================
- 2. 카드 구성 요소
-=============================== */
+/* 카드 */
 .card {
   background-color: var(--color-card);
   border-radius: 12px;
@@ -47,9 +49,7 @@ body {
   color: var(--color-primary);
 }
 
-/* ===============================
- 3. 테이블 스타일
-=============================== */
+/* 테이블 */
 .table {
   width: 100%;
   border-collapse: collapse;
@@ -57,21 +57,21 @@ body {
   font-size: 14px;
 }
 .table th {
-  color: var(--color-primary);
+  color: var(--color-text);
   border-bottom: 2px solid var(--color-border);
   padding: 12px 10px;
-  text-align: left;
-  background-color: #e6ecf4;
+  text-align: center;
+  background-color: var(--color-primary-bg);
+  font-weight: 600;
 }
 .table td {
   border-bottom: 1px solid var(--color-border);
   padding: 10px;
   color: var(--color-text);
+  text-align: center;
 }
 
-/* ===============================
- 4. 알림/상태 카드
-=============================== */
+/* 알림 */
 .alert {
   padding: 12px 16px;
   border-radius: 10px;
@@ -79,8 +79,8 @@ body {
   margin-top: 10px;
 }
 .alert-warning {
-  background-color: #FFF3CD;
-  color: #856404;
+  background-color: var(--color-warning);
+  color: #8A6D3B;
 }
 .alert-danger {
   background-color: var(--color-accent);
@@ -91,18 +91,14 @@ body {
   color: white;
 }
 
-/* ===============================
- 5. 차트/그래프 배경
-=============================== */
+/* 그래프 컨테이너 */
 .chart-container {
   background-color: white;
   border-radius: 12px;
   padding: 10px;
 }
 
-/* ===============================
- 6. 레이아웃 (그리드 등)
-=============================== */
+/* 레이아웃 */
 .grid-2x2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -120,9 +116,7 @@ body {
   color: var(--color-primary);
 }
 
-/* ===============================
- 7. 버튼 스타일
-=============================== */
+/* 버튼 */
 .btn {
   background-color: var(--color-primary);
   color: white;
@@ -135,10 +129,10 @@ body {
   transition: 0.3s;
 }
 .btn:hover {
-  background-color: #002f5e;
+  background-color: #2F6BB2;
 }
 .btn-danger {
-  background-color: var(--color-danger);
+  background-color: var(--color-accent);
   color: white;
 }
 .btn-outline {
@@ -151,9 +145,7 @@ body {
   color: white;
 }
 
-/* ===============================
- 8. 유틸리티 클래스
-=============================== */
+/* 유틸리티 */
 .text-center {
   text-align: center;
 }
@@ -161,13 +153,13 @@ body {
   display: none;
 }
 .text-danger {
-  color: var(--color-danger) !important;
+  color: var(--color-accent) !important;
 }
 .border-danger {
   border: 2px solid var(--color-accent) !important;
 }
 .border-warning {
-  border: 2px dashed #FFA000 !important;
+  border: 2px dashed var(--color-warning) !important;
 }
 .border-success {
   border: 2px solid var(--color-success) !important;

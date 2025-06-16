@@ -4,3 +4,4 @@ matplotlib
 shiny
 shinywidgets
 faicons
+reportlab
