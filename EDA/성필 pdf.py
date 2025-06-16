@@ -11,7 +11,6 @@ from matplotlib import font_manager
 from pathlib import Path
 from shinywidgets import output_widget, render_widget
 import tempfile
-import matplotlib.ticker as ticker
 from shared import streaming_df, train
 
 from reportlab.pdfbase import pdfmetrics
@@ -83,11 +82,12 @@ app_ui = ui.TagList(
                 align_items_center=False  # ← 꼭 추가: 버튼이 아래로 너무 내려가는 걸 방지
             ),
 
+
             ui.layout_column_wrap(
-                ui.card("총 전력 사용량", ui.output_text("range_usage")),
-                ui.card("총 전기요금", ui.output_text("range_cost")),
-                ui.card("일평균 전력 사용량", ui.output_text("avg_usage")),
-                ui.card("일평균 전기요금", ui.output_text("avg_cost")),
+                ui.card("총 전력 사용량 (kWh)", ui.output_text("range_usage")),
+                ui.card("총 전기요금 (원)", ui.output_text("range_cost")),
+                ui.card("일평균 전력 사용량 (kWh)", ui.output_text("avg_usage")),
+                ui.card("일평균 전기요금 (원)", ui.output_text("avg_cost")),
                 width=1/4,
                 gap="20px"
             ),
@@ -203,42 +203,6 @@ app_ui = ui.TagList(
 #  TAB1 A
 #####################################
 def server(input, output, session):
-    # PDF 다운로드 기능 (기간별 요약 리포트)
-    from reportlab.pdfgen import canvas
-    from reportlab.lib.pagesizes import A4
-    import tempfile
-    from pathlib import Path
-
-    @output
-    @render.download(filename="기간_요약.pdf", media_type="application/pdf")
-    def download_pdf():
-        start, end = input.기간()
-        df_range = train[(train['측정일시'].dt.date >= start) & (train['측정일시'].dt.date <= end)]
-
-        total_usage = df_range["전력사용량(kWh)"].sum()
-        total_cost = df_range["전기요금(원)"].sum()
-        days = (end - start).days + 1
-        avg_usage = total_usage / days if days > 0 else 0
-        avg_cost = total_cost / days if days > 0 else 0
-
-        tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-        c = canvas.Canvas(tmpfile.name, pagesize=A4)
-        c.setFont("MalgunGothic", 16)
-        c.drawString(100, 780, "기간별 전력 사용 및 요금 요약 보고서")
-        width, height = A4
-
-        c.setFont("MalgunGothic", 12)
-        c.drawString(100, height - 100, f"선택 기간: {start} ~ {end}")
-        c.drawString(100, height - 120, f"총 전력 사용량: {total_usage:,.2f} kWh")
-        c.drawString(100, height - 140, f"총 전기요금: {total_cost:,.0f} 원")
-        c.drawString(100, height - 160, f"일평균 전력 사용량: {avg_usage:,.2f} kWh")
-        c.drawString(100, height - 180, f"일평균 전기요금: {avg_cost:,.0f} 원")
-
-        c.showPage()
-        c.save()
-        return open(tmpfile.name, "rb")  
-    
-
     @output
     @render.text
     def range_usage():
@@ -251,15 +215,7 @@ def server(input, output, session):
     def range_cost():
         start, end = input.기간()
         mask = (train['측정일시'].dt.date >= start) & (train['측정일시'].dt.date <= end)
-
-        total_cost = train.loc[mask, '전기요금(원)'].sum()
-        total_usage = train.loc[mask, '전력사용량(kWh)'].sum()
-
-        if total_usage > 0:
-            avg_unit_price = total_cost / total_usage
-            return f"{total_cost:,.0f} 원\n(단가: {avg_unit_price:,.2f} 원/kWh)"
-        else:
-            return f"{total_cost:,.0f} 원\n(단가: 계산불가)"
+        return f"{train.loc[mask, '전기요금(원)'].sum():,.0f} 원"
 
     @output
     @render.text
@@ -276,16 +232,8 @@ def server(input, output, session):
         start, end = input.기간()
         mask = (train['측정일시'].dt.date >= start) & (train['측정일시'].dt.date <= end)
         days = (end - start).days + 1
-
-        total_cost = train.loc[mask, '전기요금(원)'].sum()
-        total_usage = train.loc[mask, '전력사용량(kWh)'].sum()
-
-        if days > 0 and total_usage > 0:
-            avg_cost_val = total_cost / days
-            avg_unit_price = total_cost / total_usage
-            return f"{avg_cost_val:,.0f} 원\n(단가: {avg_unit_price:,.2f} 원/kWh)"
-        else:
-            return f"{0:,.0f} 원\n(단가: 계산불가)"
+        val = train.loc[mask, '전기요금(원)'].sum() / days
+        return f"{val:,.0f} 원"
 
 
 #####################################
@@ -333,7 +281,6 @@ def server(input, output, session):
             ax1.set_xlabel("시간")
             ax1.set_ylabel("전력 사용량 (kWh)")
             ax2.set_ylabel("전기요금 (원)")
-            ax2.yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{int(x):,}"))
             ax1.set_title(f"{선택월} 월 기준 시간별 전력 사용량(누적) 및 전기요금 추이")
             ax1.legend(title="작업유형")
             fig.tight_layout()
@@ -354,7 +301,6 @@ def server(input, output, session):
             ax2.plot(요일순서, grouped['전기요금(원)'], color='red', marker='o', label='전기요금')
             ax1.set_ylabel("전력 사용량 (kWh)")
             ax2.set_ylabel("전기요금 (원)")
-            ax2.yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{int(x):,}"))
             ax1.set_xlabel("요일")
             ax1.set_title(f"{선택월} 월 기준 요일별 전력 사용량 및 전기요금 추이")
             fig.tight_layout()
@@ -376,13 +322,12 @@ def server(input, output, session):
                 sub = grouped[grouped['구분'] == gubun]
                 ax1.bar(sub['일'], sub['전력사용량(kWh)'], color=color_map[gubun], label=gubun)
 
-            total_by_day = df.groupby('일')['전기요금(원)'].sum().sort_index()
+            total_by_day = df.groupby('일')['전기요금(원)'].sum().reindex(range(1, 32), fill_value=0)
             ax2.plot(total_by_day.index, total_by_day.values, color='red', marker='o', label='전기요금')
 
             ax1.set_xlabel("일")
             ax1.set_ylabel("전력 사용량 (kWh)")
             ax2.set_ylabel("전기요금 (원)")
-            ax2.yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{int(x):,}"))
             ax1.set_title(f"{선택월} 월 기준 일별 전력 사용량 및 전기요금 추이")
 
             # 범례 병합
@@ -410,7 +355,6 @@ def server(input, output, session):
             ax2.plot(grouped['단위'], grouped['전기요금(원)'], color='red', marker='o', label='전기요금')
             ax1.set_ylabel("전력 사용량 (kWh)")
             ax2.set_ylabel("전기요금 (원)")
-            ax2.yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{int(x):,}"))
             ax1.set_xlabel(단위)
             ax1.set_title(f"{선택월} 월 기준 {단위}별 전력 사용량 및 전기요금 추이")
             fig.tight_layout()
@@ -645,6 +589,42 @@ def server(input, output, session):
         plt.close(fig)
         tmpfile.close()
         return {"src": tmpfile.name, "alt": "시간대별 작업유형별 전력사용량"}
+
+
+    # 📄 PDF 다운로드 기능 (기간별 요약 리포트)
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.pagesizes import A4
+    import tempfile
+    from pathlib import Path
+
+    @output
+    @render.download(filename="기간_요약.pdf", media_type="application/pdf")
+    def download_pdf():
+        start, end = input.기간()
+        df_range = train[(train['측정일시'].dt.date >= start) & (train['측정일시'].dt.date <= end)]
+
+        total_usage = df_range["전력사용량(kWh)"].sum()
+        total_cost = df_range["전기요금(원)"].sum()
+        days = (end - start).days + 1
+        avg_usage = total_usage / days if days > 0 else 0
+        avg_cost = total_cost / days if days > 0 else 0
+
+        tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+        c = canvas.Canvas(tmpfile.name, pagesize=A4)
+        c.setFont("MalgunGothic", 16)
+        c.drawString(100, 780, "기간별 전력 사용 및 요금 요약 보고서")
+        width, height = A4
+
+        c.setFont("MalgunGothic", 12)
+        c.drawString(100, height - 100, f"선택 기간: {start} ~ {end}")
+        c.drawString(100, height - 120, f"총 전력 사용량: {total_usage:,.2f} kWh")
+        c.drawString(100, height - 140, f"총 전기요금: {total_cost:,.0f} 원")
+        c.drawString(100, height - 160, f"일평균 전력 사용량: {avg_usage:,.2f} kWh")
+        c.drawString(100, height - 180, f"일평균 전기요금: {avg_cost:,.0f} 원")
+
+        c.showPage()
+        c.save()
+        return open(tmpfile.name, "rb")    
 
 
 
