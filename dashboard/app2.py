@@ -16,8 +16,7 @@ from shared import streaming_df, train
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 # 폰트 등록 (PDF 폰트용)
-pdfmetrics.registerFont(TTFont("MalgunGothic", "C:/Windows/Fonts/malgun.ttf"))
-
+pdfmetrics.registerFont(TTFont("MalgunGothic", "C:/Windows/Fonts/malgun.ttf")) 
 
 # ===============================
 # 한글 폰트 설정, 마이너스 깨짐 방지
