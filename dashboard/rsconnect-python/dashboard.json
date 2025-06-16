@@ -1,0 +1,12 @@
+{
+    "https://api.shinyapps.io": {
+        "server_url": "https://api.shinyapps.io",
+        "filename": "C:\\Users\\USER\\Desktop\\project3_zoozoo\\energy_cost_estimator\\dashboard",
+        "app_url": "https://juyn.shinyapps.io/energy_cost_estimator1/",
+        "app_id": 14941973,
+        "app_guid": null,
+        "title": "energy_cost_estimator",
+        "app_mode": "python-shiny",
+        "app_store_version": 1
+    }
+}
