@@ -65,3 +65,12 @@ plt.show()
 test= pd.read_csv('../data/test.csv')
 
 
+
+# streaming_df에 전력 사용량 추가 
+streaming_df= pd.read_csv('../dashboard/data/streaming_df.csv')
+submission_df= pd.read_csv('../dashboard/data/submission_gboost0614.csv')
+streaming_df["예측_전력사용량"] = submission_df["전력사용량(kWh)"]
+# streaming_df.to_csv('../dashboard/data/streaming_df.csv', index=False)
+
+# df= pd.read_csv('../dashboard/data/streaming_df.csv')
+
