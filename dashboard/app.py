@@ -644,68 +644,99 @@ def server(input, output, session):
     def usage_by_dayofweek_matplotlib():
         selected_month = int(input.selected_month())
         df_month = train[train['월'] == selected_month].copy()
+
         dow_map = {0: "월", 1: "화", 2: "수", 3: "목", 4: "금", 5: "토", 6: "일"}
         df_month['요일'] = df_month['측정일시'].dt.dayofweek.map(dow_map)
+
+        # ✅ 고정 순서 및 색상 설정
+        load_order = ["Light_Load", "Medium_Load", "Maximum_Load"]
+        color_map = {
+            "Light_Load": "#B3D7FF",
+            "Medium_Load": "#FFEB99",
+            "Maximum_Load": "#FF9999"
+        }
+
+        # ✅ pivot 생성 및 순서 고정
         pivot = df_month.pivot_table(
             index='요일', columns='작업유형', values='전력사용량(kWh)', aggfunc='sum', fill_value=0
-        ).reindex(list(dow_map.values()))
+        ).reindex(list(dow_map.values())).fillna(0)
+        pivot = pivot.reindex(columns=load_order, fill_value=0)
+
+        # ✅ 시각화
         fig, ax = plt.subplots(figsize=(7, 3))
         bottom = np.zeros(len(pivot))
-        colors = ['#FFD700', '#FF6347', '#DB7093']
 
-        for idx, col in enumerate(pivot.columns):
-            bar = ax.bar(pivot.index, pivot[col], bottom=bottom, color=colors[idx], label=col)
+        for col in load_order:
+            ax.bar(pivot.index, pivot[col], bottom=bottom, color=color_map[col], label=col)
             for i, val in enumerate(pivot[col]):
-                # --- 2500 미만 사용량은 표기 생략 ---
                 if val > 2500:
                     total = pivot.iloc[i].sum()
                     ratio = (val / total * 100) if total > 0 else 0
                     ax.text(
-                        i, bottom[i] + val / 2, f"{int(val):,}\n({ratio:.1f}%)",
+                        i, bottom[i] + val / 2,
+                        f"{int(val):,}\n({ratio:.1f}%)",
                         ha='center', va='center', fontsize=8, color='black'
                     )
             bottom += pivot[col].values
+
         ax.set_title(f"{selected_month}월 요일별 작업유형별 전력 사용량")
         ax.set_xlabel("요일")
         ax.set_ylabel("전력사용량 (kWh)")  
         ax.legend(title='작업유형')
-        plt.tight_layout()                 # ← 이거 한 줄 추가!
+        plt.tight_layout()
+
         tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
         plt.savefig(tmpfile, format="png")
         plt.close(fig)
         tmpfile.close()
         return {"src": tmpfile.name, "alt": "요일별 작업유형별 전력사용량"}
 
+
     @output
     @render.image
     def usage_by_hour_matplotlib():
         selected_month = int(input.selected_month())
-        selected_day = input.selected_day()  # 새 input 사용
+        selected_day = input.selected_day()
+
         df_month = train[train['월'] == selected_month].copy()
         dow_map = {0: "월", 1: "화", 2: "수", 3: "목", 4: "금", 5: "토", 6: "일"}
         df_month['요일'] = df_month['측정일시'].dt.dayofweek.map(dow_map)
         df_month['시각'] = df_month['측정일시'].dt.hour
         df_day = df_month[df_month['요일'] == selected_day]
+
+        load_order = ["Light_Load", "Medium_Load", "Maximum_Load"]
+        color_map = {
+            "Light_Load": "#B3D7FF",
+            "Medium_Load": "#FFEB99",
+            "Maximum_Load": "#FF9999"
+        }
+
         pivot = df_day.pivot_table(
             index='시각', columns='작업유형', values='전력사용량(kWh)', aggfunc='sum', fill_value=0
         ).sort_index()
+        pivot = pivot.reindex(columns=load_order, fill_value=0)
+
         fig, ax = plt.subplots(figsize=(7, 2.7))
         bottom = np.zeros(len(pivot))
-        colors = ['#FFD700', '#FF6347', '#DB7093']
-        for idx, col in enumerate(pivot.columns):
-            ax.bar(pivot.index, pivot[col], bottom=bottom, color=colors[idx], label=col, width=0.8, alpha=0.85)
+
+        for col in load_order:
+            ax.bar(pivot.index, pivot[col], bottom=bottom,
+                color=color_map[col], label=col, width=0.8, alpha=0.85)
             bottom += pivot[col].values
+
         ax.set_title(f"{selected_month}월 {selected_day}요일 시간대별 작업유형별 전력 사용량")
         ax.set_xlabel("시각(0~23시)")
         ax.set_ylabel("전력사용량 (kWh)")
         ax.legend(title='작업유형')
-        ax.set_xticks(range(0,24))
+        ax.set_xticks(range(0, 24))
         plt.tight_layout()
+
         tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
         plt.savefig(tmpfile, format="png")
         plt.close(fig)
         tmpfile.close()
         return {"src": tmpfile.name, "alt": "시간대별 작업유형별 전력사용량"}
+
 
 
 
