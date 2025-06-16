@@ -14,6 +14,11 @@ import tempfile
 import matplotlib.ticker as ticker
 from shared import streaming_df, train
 
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+# 폰트 등록 (PDF 폰트용)
+pdfmetrics.registerFont(TTFont("MalgunGothic", "C:/Windows/Fonts/malgun.ttf")) 
+
 # ===============================
 # 한글 폰트 설정, 마이너스 깨짐 방지
 # ===============================
@@ -71,7 +76,7 @@ app_ui = ui.TagList(
         ui.nav_panel(
             "1~11월 전기요금 분석",
 
-            ui.input_date_range("기간", "기간 선택", start="2024-01-01", end="2024-01-31"),
+
             ui.layout_column_wrap(
                 ui.card("총 전력 사용량", ui.output_text("range_usage")),
                 ui.card("총 전기요금", ui.output_text("range_cost")),
@@ -598,6 +603,42 @@ def server(input, output, session):
         plt.close(fig)
         tmpfile.close()
         return {"src": tmpfile.name, "alt": "시간대별 작업유형별 전력사용량"}
+
+
+    # 📄 PDF 다운로드 기능 (기간별 요약 리포트)
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.pagesizes import A4
+    import tempfile
+    from pathlib import Path
+
+    @output
+    @render.download(filename="기간_요약.pdf", media_type="application/pdf")
+    def download_pdf():
+        start, end = input.기간()
+        df_range = train[(train['측정일시'].dt.date >= start) & (train['측정일시'].dt.date <= end)]
+
+        total_usage = df_range["전력사용량(kWh)"].sum()
+        total_cost = df_range["전기요금(원)"].sum()
+        days = (end - start).days + 1
+        avg_usage = total_usage / days if days > 0 else 0
+        avg_cost = total_cost / days if days > 0 else 0
+
+        tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+        c = canvas.Canvas(tmpfile.name, pagesize=A4)
+        c.setFont("MalgunGothic", 16)
+        c.drawString(100, 780, "기간별 전력 사용 및 요금 요약 보고서")
+        width, height = A4
+
+        c.setFont("MalgunGothic", 12)
+        c.drawString(100, height - 100, f"선택 기간: {start} ~ {end}")
+        c.drawString(100, height - 120, f"총 전력 사용량: {total_usage:,.2f} kWh")
+        c.drawString(100, height - 140, f"총 전기요금: {total_cost:,.0f} 원")
+        c.drawString(100, height - 160, f"일평균 전력 사용량: {avg_usage:,.2f} kWh")
+        c.drawString(100, height - 180, f"일평균 전기요금: {avg_cost:,.0f} 원")
+
+        c.showPage()
+        c.save()
+        return open(tmpfile.name, "rb")    
 
 
 
