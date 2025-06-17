@@ -320,8 +320,24 @@ app_ui = ui.TagList(
            # B: Plotly 멀티라인 차트 추가
             ui.card(
                 ui.card_header("[B] 1~11월 일자별 전력 사용량 추이 (6개 시간대 구분)"),
-                ui.output_plot  ('time_bin_plot')
-            ), 
+
+                # ✅ 먼저 선택 체크박스를 배치
+                ui.input_checkbox_group(
+                    "선택시간구간", "표시할 시간대 선택",
+                    choices=[
+                        "00:00–04:00", "04:01–08:00", "08:01–12:00",
+                        "12:01–16:00", "16:01–20:00", "20:01–24:00"
+                    ],
+                    selected=[
+                        "00:00–04:00", "04:01–08:00", "08:01–12:00",
+                        "12:01–16:00", "16:01–20:00", "20:01–24:00"
+                    ],
+                    inline=True
+                ),
+
+                # ✅ 그 아래에 그래프 출력
+                ui.output_plot("time_bin_plot")
+            ),
 
 
             ui.layout_columns(
@@ -386,42 +402,18 @@ app_ui = ui.TagList(
                 ),
                 class_="d-flex align-items-center"  # ▶ 세로 가운데 정렬
             ),
-
-
-            ui.layout_columns(
-                ui.card(
-                    ui.card_header("[A] 12월 실시간 요금"),
-                    ui.output_ui("card_a"),
-                    # style="height:220px"
-                    style="margin-bottom: 10px; padding-bottom: 0px;"
-                ),
-                ui.card(
-                    ui.card_header("[B] 전 기간과 비교"),  # ✅ 제목만 header에!
-
-                    ui.div(  # ✅ 카드 본문 좌측 상단에 select 위치
-                        ui.input_select(
-                            "비교월", None,
-                            choices=[str(i) for i in range(1, 12)],
-                            selected="11",
-                            width="100px"
-                        ),
-                        style="margin-left: 10px; margin-bottom: 10px;"  # 여백 조절
-                    ),
-                    ui.output_ui("card_b"),  # 그래프 등 주요 콘텐츠
-                    style="margin-bottom: 10px; padding-bottom: 0px;"
-                ),
-                col_widths=[6, 6]
+            # [A] 요약 카드 + 진행률 바
+            ui.card(
+                ui.card_header("[A] 12월 실시간 요금"),
+                ui.output_ui("card_a"),
+                style="margin-bottom: 16px;"
             ),
 
-            ui.layout_columns(
-                ui.card(
-                    ui.card_header("[C] 12월 실시간 전력사용량 및 전기요금"),
-                    # 1. 정보 태그 (가로 정렬, 직접 스타일 조절됨)
-                    ui.output_ui("latest_info_tags"),
-                    # 2. 실시간 그래프
-                    ui.output_plot("live_plot", height="600px"),
-                    style="height: 550px;"
-                ),
+            # [C] 실시간 그래프 (전력 + 요금)
+            ui.card(
+                ui.card_header("[C] 12월 실시간 전력사용량 및 전기요금"),
+                ui.output_ui("latest_info_tags"),
+                ui.output_plot("live_plot", height="500px")
             ),
         ),
 
@@ -430,10 +422,6 @@ app_ui = ui.TagList(
         id="page"
     )
 )
-
-
-
-
 
 
 
@@ -452,7 +440,10 @@ def server(input, output, session):
         selected_month = int(input.pdf_month())
         return le_report(train, selected_month)
     
-##################################################
+
+#####################################
+#  TAB1 A
+#####################################
 
     @output
     @render.text
@@ -554,62 +545,71 @@ def server(input, output, session):
     @output
     @render.plot
     def time_bin_plot():
-        # 1) 데이터 로드 & 전처리
+        # 1. 데이터 로드
         data_path = Path(__file__).parent / "data" / "train.csv"
         df = pd.read_csv(data_path, parse_dates=["측정일시"])
-        df["date"]    = df["측정일시"].dt.floor("D")
-        df["day"]     = df["측정일시"].dt.day
+        df["date"] = df["측정일시"].dt.floor("D")
+        df["day"] = df["측정일시"].dt.day
         df["minutes"] = df["측정일시"].dt.hour * 60 + df["측정일시"].dt.minute
 
-        # 2) 공휴일 제외
         holidays = pd.to_datetime([
-            "2024-01-01","2024-01-10","2024-01-11","2024-01-12","2024-01-13",
-            "2024-03-01","2024-05-05","2024-05-06","2024-05-15","2024-06-06",
-            "2024-08-15","2024-09-16","2024-09-17","2024-09-18","2024-09-19",
-            "2024-10-03","2024-10-09"
+            "2024-01-01", "2024-01-10", "2024-01-11", "2024-01-12", "2024-01-13",
+            "2024-03-01", "2024-05-05", "2024-05-06", "2024-05-15", "2024-06-06",
+            "2024-08-15", "2024-09-16", "2024-09-17", "2024-09-18", "2024-09-19",
+            "2024-10-03", "2024-10-09"
         ])
         df = df[~df["date"].isin(holidays)]
 
-        # 3) 6구간 라벨링 & 평균 계산
-        bins   = [0, 240, 480, 720, 960, 1200, 1440]
+        # 2. 시간대 구간 지정
+        bins = [0, 240, 480, 720, 960, 1200, 1440]
         labels = [
-            "00:00–04:00","04:01–08:00","08:01–12:00",
-            "12:01–16:00","16:01–20:00","20:01–24:00"
+            "00:00–04:00", "04:01–08:00", "08:01–12:00",
+            "12:01–16:00", "16:01–20:00", "20:01–24:00"
         ]
-        df["time_bin"] = pd.cut(df["minutes"], bins=bins, labels=labels,
-                                right=True, include_lowest=True)
-        grp = (
-            df
-            .groupby(["day","time_bin"], observed=True)["전력사용량(kWh)"]
-            .mean()
-            .reset_index()
-        )
+        df["time_bin"] = pd.cut(df["minutes"], bins=bins, labels=labels, right=True, include_lowest=True)
+
+        # ✅ 3. 선택한 구간 필터링
+        selected_bins = input.선택시간구간()
+        if not selected_bins:
+            selected_bins = []  # 없으면 비워두기
+        df = df[df["time_bin"].isin(selected_bins)]
+
+        if df.empty:
+            fig, ax = plt.subplots(figsize=(10, 4))
+            ax.axis("off")
+            ax.text(0.5, 0.5, "선택된 시간 구간에 해당하는 데이터가 없습니다.", ha='center', va='center', fontsize=14)
+            return fig
+
+        # 4. 그룹핑 및 피벗
+        grp = df.groupby(["day", "time_bin"], observed=True)["전력사용량(kWh)"].mean().reset_index()
         pivot = (
             grp
             .pivot(index="day", columns="time_bin", values="전력사용량(kWh)")
             .reindex(columns=labels)
-            .reindex(index=range(1,32))
+            .reindex(index=range(1, 32))
             .fillna(0)
         )
 
-        # 4) Matplotlib 멀티라인 차트 생성
+        # 5. 그래프
         fig, ax = plt.subplots(figsize=(10, 5))
-        colors = {
-                "00:00–04:00": "#B3D7FF",
-                "04:01–08:00": "#FFEB99",
-                "08:01–12:00": "#FF9999",
-                "12:01–16:00": "#F9C0C0",
-                "16:01–20:00": "#A1E3A1",
-                "20:01–24:00": "#D1C4E9"
-            }
-        for lab in labels:
-            ax.plot(pivot.index, pivot[lab], marker="o", label=lab, color=colors[lab])
-        # ax.set_title("1일–31일 × 6구간 전력 사용량 추이 (공휴일 제외)")
+        color_map = {
+            "00:00–04:00": "#B3D7FF",
+            "04:01–08:00": "#FFEB99",
+            "08:01–12:00": "#FF9999",
+            "12:01–16:00": "#F9C0C0",
+            "16:01–20:00": "#A1E3A1",
+            "20:01–24:00": "#D1C4E9"
+        }
+
+        for label in selected_bins:
+            if label in pivot.columns:
+                ax.plot(pivot.index, pivot[label], label=label, color=color_map.get(label, "gray"), marker="o")
+
         ax.set_xlabel("일자")
         ax.set_ylabel("평균 전력 사용량 (kWh)")
         ax.set_xticks(range(1, 32))
-        ax.legend(title="시간 구간", loc="best")
-        plt.tight_layout()
+        ax.legend(title="시간 구간")
+        fig.tight_layout()
 
         return fig
 
@@ -1080,30 +1080,50 @@ def server(input, output, session):
     def card_a():
         return ui.div(
             ui.layout_columns(
-                ui.div([
-                    ui.tags.b("실시간 누적 요금"),
-                    ui.br(),
-                    ui.output_text("realtime_total_cost")
-                ], style="margin-right: 30px; font-size: 18px;"),
-
-                ui.div([
-                    ui.tags.b("실시간 누적 전력사용량"),
-                    ui.br(),
-                    ui.output_text("realtime_total_usage")
-                ], style="margin-right: 30px; font-size: 18px;"),
-
-                ui.div([
-                    ui.tags.b("12월 총 예상 요금"),
-                    ui.br(),
-                    ui.output_text("estimated_total_cost")
-                ], style="font-size: 18px;"),
+                ui.card(
+                    ui.tags.div(
+                        ui.tags.span("총 예상 전기요금", class_="fw-bold", style="font-size:1.1rem;"),
+                        ui.br(),
+                        ui.tags.span(ui.output_text("estimated_total_cost"), style="font-size:1.2rem;"),
+                        class_="text-center"
+                    )
+                ),
+                ui.card(
+                    ui.tags.div(
+                        ui.tags.span("총 예상 전력사용량", class_="fw-bold", style="font-size:1.1rem;"),
+                        ui.br(),
+                        ui.tags.span(ui.output_text("estimated_total_usage"), style="font-size:1.2rem;"),
+                        class_="text-center"
+                    )
+                ),
+                ui.card(
+                    ui.tags.div(
+                        ui.tags.span("12월 누적 전기요금", class_="fw-bold", style="font-size:1.1rem;"),
+                        ui.br(),
+                        ui.tags.span(ui.output_text("realtime_total_cost"), style="font-size:1.2rem;"),
+                        class_="text-center"
+                    )
+                ),
+                ui.card(
+                    ui.tags.div(
+                        ui.tags.span("12월 누적 전력사용량", class_="fw-bold", style="font-size:1.1rem;"),
+                        ui.br(),
+                        ui.tags.span(ui.output_text("realtime_total_usage"), style="font-size:1.2rem;"),
+                        class_="text-center"
+                    )
+                ),
+                col_widths=[3, 3, 3, 3],
+                gap="16px"
             ),
             ui.hr(),
+
             ui.tags.div(
-                ui.tags.b("12월 진행률"),
-                ui.output_ui("december_progress_bar")
+                ui.tags.p("12월 진행률", class_="fw-bold", style="font-size:1.1rem;"),
+                ui.output_ui("december_progress_bar"),
+                style="margin-top: 10px;"
             )
         )
+
 
     @output
     @render.text
@@ -1162,104 +1182,110 @@ def server(input, output, session):
             ui.tags.progress(value=progress_ratio, max=100, style="width:100%"),
             f"{days_elapsed}일 경과 / 총 {total_days}일 ({progress_ratio}%)"
         )
+    
+    @output
+    @render.text
+    def estimated_total_usage():
+        total_usage = streaming_df["예측_전력사용량"].sum()
+        return f"{total_usage:,.0f} kWh"
 
     ################################
     # [B] 
     ################################
-    @output
-    @render.ui
-    def card_b():
-        return ui.output_image("compare_bar")
+    # @output
+    # @render.ui
+    # def card_b():
+    #     return ui.output_image("compare_bar")
     
-    @output
-    @render.image
-    def compare_bar():
-        reactive.invalidate_later(3)
+    # @output
+    # @render.image
+    # def compare_bar():
+    #     reactive.invalidate_later(3)
         
-        streamer_obj = streamer.get()
-        df_stream = streamer_obj.get_data()
+    #     streamer_obj = streamer.get()
+    #     df_stream = streamer_obj.get_data()
 
-        if df_stream.empty or df_stream["측정일시"].isna().all():
-            fig, ax = plt.subplots(figsize=(4, 2))
-            ax.axis("off")
-            ax.text(0.5, 0.5, "스트리밍 데이터 없음", ha='center', va='center', fontsize=11, color='gray')
-            tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-            plt.savefig(tmpfile.name, format="png")
-            plt.close(fig)
-            return {"src": tmpfile.name, "alt": "스트리밍 데이터 없음"}
+    #     if df_stream.empty or df_stream["측정일시"].isna().all():
+    #         fig, ax = plt.subplots(figsize=(4, 2))
+    #         ax.axis("off")
+    #         ax.text(0.5, 0.5, "스트리밍 데이터 없음", ha='center', va='center', fontsize=11, color='gray')
+    #         tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+    #         plt.savefig(tmpfile.name, format="png")
+    #         plt.close(fig)
+    #         return {"src": tmpfile.name, "alt": "스트리밍 데이터 없음"}
 
-        latest_day = df_stream["측정일시"].max()
-        current_weekday = latest_day.strftime("%A")
+    #     latest_day = df_stream["측정일시"].max()
+    #     current_weekday = latest_day.strftime("%A")
 
-        weekday_map = {
-            "Monday": "월", "Tuesday": "화", "Wednesday": "수",
-            "Thursday": "목", "Friday": "금", "Saturday": "토", "Sunday": "일"
-        }
-        요일 = weekday_map.get(current_weekday, "")
-        비교월 = int(input.비교월())
+    #     weekday_map = {
+    #         "Monday": "월", "Tuesday": "화", "Wednesday": "수",
+    #         "Thursday": "목", "Friday": "금", "Saturday": "토", "Sunday": "일"
+    #     }
+    #     요일 = weekday_map.get(current_weekday, "")
+    #     비교월 = int(input.비교월())
 
-        # 기준 데이터: 해당 월의 동일 요일만 필터링
-        df_ref = train[
-            (train["월"] == 비교월) &
-            (train["측정일시"].dt.dayofweek == latest_day.dayofweek)
-        ].copy()
+    #     # 기준 데이터: 해당 월의 동일 요일만 필터링
+    #     df_ref = train[
+    #         (train["월"] == 비교월) &
+    #         (train["측정일시"].dt.dayofweek == latest_day.dayofweek)
+    #     ].copy()
 
-        if df_ref.empty:
-            fig, ax = plt.subplots(figsize=(4, 2))
-            ax.axis("off")
-            ax.text(0.5, 0.5, f"{비교월}월 {요일} 데이터 없음", ha='center', va='center', fontsize=11, color='gray')
-            tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-            plt.savefig(tmpfile.name, format="png")
-            plt.close(fig)
-            return {"src": tmpfile.name, "alt": f"{비교월}월 {요일} 데이터 없음"}
+    #     if df_ref.empty:
+    #         fig, ax = plt.subplots(figsize=(4, 2))
+    #         ax.axis("off")
+    #         ax.text(0.5, 0.5, f"{비교월}월 {요일} 데이터 없음", ha='center', va='center', fontsize=11, color='gray')
+    #         tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+    #         plt.savefig(tmpfile.name, format="png")
+    #         plt.close(fig)
+    #         return {"src": tmpfile.name, "alt": f"{비교월}월 {요일} 데이터 없음"}
 
-        # 하루 단위 총합 후 평균
-        df_ref["날짜"] = df_ref["측정일시"].dt.date
-        df_grouped = df_ref.groupby("날짜")[["전기요금(원)", "전력사용량(kWh)"]].sum()
+    #     # 하루 단위 총합 후 평균
+    #     df_ref["날짜"] = df_ref["측정일시"].dt.date
+    #     df_grouped = df_ref.groupby("날짜")[["전기요금(원)", "전력사용량(kWh)"]].sum()
 
-        ref_cost = df_grouped["전기요금(원)"].mean()
-        ref_usage = df_grouped["전력사용량(kWh)"].mean()
+    #     ref_cost = df_grouped["전기요금(원)"].mean()
+    #     ref_usage = df_grouped["전력사용량(kWh)"].mean()
 
-        # 실시간 누적
-        df_stream["날짜"] = df_stream["측정일시"].dt.date
-        stream_cost = df_stream["예측_전기요금"].sum()
-        stream_usage = df_stream["예측_전력사용량"].sum()
+    #     # 실시간 누적
+    #     df_stream["날짜"] = df_stream["측정일시"].dt.date
+    #     stream_cost = df_stream["예측_전기요금"].sum()
+    #     stream_usage = df_stream["예측_전력사용량"].sum()
 
-        # 비율 계산
-        cost_ratio = (stream_cost / ref_cost) * 100 if ref_cost > 0 else 0
-        usage_ratio = (stream_usage / ref_usage) * 100 if ref_usage > 0 else 0
+    #     # 비율 계산
+    #     cost_ratio = (stream_cost / ref_cost) * 100 if ref_cost > 0 else 0
+    #     usage_ratio = (stream_usage / ref_usage) * 100 if ref_usage > 0 else 0
 
-        # 그래프
-        fig, ax = plt.subplots(2, 2, figsize=(6.5, 4.5), gridspec_kw={'height_ratios': [3, 1]})
-        colors = ["#B3D7FF", "#FF9999"]
+    #     # 그래프
+    #     fig, ax = plt.subplots(2, 2, figsize=(6.5, 4.5), gridspec_kw={'height_ratios': [3, 1]})
+    #     colors = ["#B3D7FF", "#FF9999"]
 
-        # ─ 1행: 막대그래프
-        label_기준 = f"기준({비교월}월 {요일}요일 평균)"
-        label_실시간 = "실시간"
-        ax[0, 0].bar([label_기준, label_실시간], [ref_cost, stream_cost], color=colors)
-        ax[0, 0].set_title("전기요금 비교")
-        ax[0, 0].set_ylabel("원")
+    #     # ─ 1행: 막대그래프
+    #     label_기준 = f"기준({비교월}월 {요일}요일 평균)"
+    #     label_실시간 = "실시간"
+    #     ax[0, 0].bar([label_기준, label_실시간], [ref_cost, stream_cost], color=colors)
+    #     ax[0, 0].set_title("전기요금 비교")
+    #     ax[0, 0].set_ylabel("원")
 
         
-        ax[0, 1].bar([label_기준, label_실시간], [ref_usage, stream_usage], color=colors)
-        ax[0, 1].set_title("전력사용량 비교")
-        ax[0, 1].set_ylabel("kWh")
+    #     ax[0, 1].bar([label_기준, label_실시간], [ref_usage, stream_usage], color=colors)
+    #     ax[0, 1].set_title("전력사용량 비교")
+    #     ax[0, 1].set_ylabel("kWh")
 
-        # ─ 2행: 텍스트 (각 subplot에 글자만 표시)
-        ax[1, 0].axis("off")
-        ax[1, 1].axis("off")
-        ax[1, 0].text(0.5, 0.5, f"현재 요금은 기준의 {cost_ratio:.1f}%", ha='center', va='center', fontsize=10)
-        ax[1, 1].text(0.5, 0.5, f"현재 사용량은 기준의 {usage_ratio:.1f}%", ha='center', va='center', fontsize=10)
+    #     # ─ 2행: 텍스트 (각 subplot에 글자만 표시)
+    #     ax[1, 0].axis("off")
+    #     ax[1, 1].axis("off")
+    #     ax[1, 0].text(0.5, 0.5, f"현재 요금은 기준의 {cost_ratio:.1f}%", ha='center', va='center', fontsize=10)
+    #     ax[1, 1].text(0.5, 0.5, f"현재 사용량은 기준의 {usage_ratio:.1f}%", ha='center', va='center', fontsize=10)
 
-        fig.suptitle(f"오늘은 {요일}요일입니다", fontsize=12, y=1.02)
-        fig.tight_layout()
+    #     fig.suptitle(f"오늘은 {요일}요일입니다", fontsize=12, y=1.02)
+    #     fig.tight_layout()
 
-        tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-        plt.savefig(tmpfile.name, format="png", bbox_inches='tight')
-        plt.close(fig)
+    #     tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+    #     plt.savefig(tmpfile.name, format="png", bbox_inches='tight')
+    #     plt.close(fig)
 
-        return {"src": tmpfile.name, "alt": "요일 비교 막대그래프",
-                "style": "width: 100%; max-width: 600px; height: 400px; display: block; margin-left: auto; margin-right: auto;"}
+    #     return {"src": tmpfile.name, "alt": "요일 비교 막대그래프",
+    #             "style": "width: 100%; max-width: 600px; height: 400px; display: block; margin-left: auto; margin-right: auto;"}
              
 
     
@@ -1282,6 +1308,7 @@ def server(input, output, session):
         df = transform_time(df, time_unit)
 
         grouped = df.groupby("단위")[["예측_전력사용량", "예측_전기요금"]].sum().reset_index()
+        grouped = grouped.tail(20)
 
         if time_unit == "일별":
             formatter = DateFormatter("%Y-%m-%d")
@@ -1344,25 +1371,32 @@ def server(input, output, session):
 
         return ui.div(
             ui.div(
-                ui.tags.b("작업유형"),
-                ui.tags.br(),
-                ui.tags.span(str(작업유형), style="font-size: 20px; font-weight: 600;"),
+                ui.tags.span("작업유형", class_="fw-bold", style="font-size:1rem;"),
+                ui.br(),
+                ui.tags.span(str(작업유형), style="font-size:1.15rem;"),
                 style="padding: 10px; min-width: 160px;"
             ),
             ui.div(
-                ui.tags.b("누적 전기요금"),
-                ui.tags.br(),
-                ui.tags.span(f"{요금:,.0f} 원" if pd.notna(요금) else "N/A", style="font-size: 20px; font-weight: 600;"),
+                ui.tags.span("전기요금", class_="fw-bold", style="font-size:1rem;"),
+                ui.br(),
+                ui.tags.span(
+                    f"{요금:,.0f} 원" if pd.notna(요금) else "N/A",
+                    style="font-size:1.15rem;"
+                ),
                 style="padding: 10px; min-width: 160px;"
             ),
             ui.div(
-                ui.tags.b("누적 전력사용량"),
-                ui.tags.br(),
-                ui.tags.span(f"{사용량:,.2f} kWh" if pd.notna(사용량) else "N/A", style="font-size: 20px; font-weight: 600;"),
+                ui.tags.span("전력사용량", class_="fw-bold", style="font-size:1rem;"),
+                ui.br(),
+                ui.tags.span(
+                    f"{사용량:,.2f} kWh" if pd.notna(사용량) else "N/A",
+                    style="font-size:1.15rem;"
+                ),
                 style="padding: 10px; min-width: 160px;"
             ),
             style="display: flex; flex-direction: row; gap: 2rem;"
         )
+
 
 
 
