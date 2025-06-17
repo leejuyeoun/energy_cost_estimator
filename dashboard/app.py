@@ -21,6 +21,7 @@ from matplotlib.dates import DateFormatter  # x축 날짜 포맷
 from matplotlib import font_manager         # 폰트 관리
 import matplotlib.ticker as ticker         # y축 포맷 (ex: 만원단위)
 import matplotlib.ticker as mticker        # PDF 내 y축 포맷 (이름만 다름, 일부 코드에서 씀)
+from matplotlib import font_manager as mpl_font_manager
 
 # PDF 생성 관련
 from reportlab.lib.utils import ImageReader         # matplotlib 이미지를 PDF로 넣기
@@ -44,6 +45,20 @@ from le_report import le_report
 # ===============================
 mpl.rcParams["font.family"] = "Malgun Gothic"
 mpl.rcParams["axes.unicode_minus"] = False
+
+def register_korean_font():
+    # malgun.ttf 경로 설정 (www 폴더 기준)
+    font_path = Path(__file__).parent / "www" / "malgun.ttf"
+
+    # 1. matplotlib용 한글 폰트 등록
+    mpl_font_manager.fontManager.addfont(str(font_path))
+    malgun_name = mpl_font_manager.FontProperties(fname=str(font_path)).get_name()
+    plt.rcParams["font.family"] = malgun_name
+    plt.rcParams["axes.unicode_minus"] = False  # 마이너스 깨짐 방지
+
+    # 2. reportlab용 한글 폰트 등록
+    pdfmetrics.registerFont(TTFont("MalgunGothic", str(font_path)))
+register_korean_font()
 
 
 # 1. 요약 지표 계산

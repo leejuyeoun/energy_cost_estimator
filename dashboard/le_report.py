@@ -1,25 +1,42 @@
+import io
+import matplotlib.pyplot as plt
+import matplotlib as mpl
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import (Paragraph, SimpleDocTemplate, Spacer, Image, Table, TableStyle)
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfbase import pdfmetrics
+from reportlab.lib.enums import TA_LEFT
+import matplotlib.ticker as mticker
+import pandas as pd
+import numpy as np
 import os
+from matplotlib import font_manager as mpl_font_manager
+from pathlib import Path 
 font_path = os.path.join(os.path.dirname(__file__), "www", "malgun.ttf")
+def register_korean_font():
+    # malgun.ttf 경로 설정 (www 폴더 기준)
+    font_path = Path(__file__).parent / "www" / "malgun.ttf"
+    # 1. matplotlib용 한글 폰트 등록
+    mpl_font_manager.fontManager.addfont(str(font_path))
+    malgun_name = mpl_font_manager.FontProperties(fname=str(font_path)).get_name()
+    plt.rcParams["font.family"] = malgun_name
+    plt.rcParams["axes.unicode_minus"] = False  # 마이너스 깨짐 방지
+    # 2. reportlab용 한글 폰트 등록
+    pdfmetrics.registerFont(TTFont("MalgunGothic", str(font_path)))
+register_korean_font()
 def le_report(train, selected_month, font_path=font_path):
-    import io
-    import matplotlib.pyplot as plt
-    import matplotlib as mpl
-    from reportlab.lib.pagesizes import A4
-    from reportlab.platypus import (Paragraph, SimpleDocTemplate, Spacer, Image, Table, TableStyle)
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib import colors
-    from reportlab.pdfbase.ttfonts import TTFont
-    from reportlab.pdfbase import pdfmetrics
-    from reportlab.lib.enums import TA_LEFT
-    import matplotlib.ticker as mticker
-    import pandas as pd
-    import numpy as np
-    import os
+
+
+
 
     # 한글 폰트 등록
     pdfmetrics.registerFont(TTFont('MalgunGothic', font_path))
     mpl.rc('font', family='Malgun Gothic')
     mpl.rcParams['axes.unicode_minus'] = False
+
+    
 
     # 1. 데이터 필터 및 요약값
     selected_month = int(selected_month)
