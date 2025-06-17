@@ -37,7 +37,8 @@ from reportlab.lib.enums import TA_LEFT             # 텍스트 정렬
 # 통계적 카운팅
 from collections import Counter                     # 예: 부하 타입별 빈도 계산
 
-
+import os
+STATIC_DIR = os.path.join(os.path.dirname(__file__), "www")
 from shared import streaming_df, train
 from le_report import le_report
 # ===============================
@@ -269,33 +270,11 @@ app_ui = ui.TagList(
                 ui.card_header("요금 중심 마인드맵"),
                 ui.layout_columns(
                     # ────── 좌측: Mermaid 마인드맵 ──────
-                    ui.HTML("""
-                    <div style="padding: 16px;">
-                        <div class="mermaid" style="font-size: 30px;">
-                        flowchart TD
-                            D["지상 무효전력량(kVarh)"] --> Q(("Q: 무효전력량(kVarh)"))
-                            E["진상무효전력량(kVarh)"] --> Q
-
-                            Q --> F[지상/진상 역률]
-                            B(["P: 전력사용량(kWh)"]) --> F["지상/진상 역률(%)"]
-                            F -.->|역률에 따른 추가 요금 부과|A[전기요금]
-
-                            B -->|회귀계수: 107.25| A["전기요금(원)"]
-                            B --> C["탄소배출량(tCO2)"]
-                            C --> A
-                        </div>
-                    </div>
-
-                    <script type="module">
-                    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
-                    mermaid.initialize({ startOnLoad: true });
-                    </script>
-                    """),
+                    ui.output_ui("my_image"),
 
                     # ────── 우측: 설명 ──────
                     ui.HTML("""
                     <div style="font-size: 16px; padding: 16px;">
-                        <br><br><br>
                         <strong>전력 관계식</strong>
                         <ul>
                         <li><strong>피상전력 관계식:</strong> S² = P² + Q²  
@@ -308,6 +287,9 @@ app_ui = ui.TagList(
                         <li><strong>지상과 진상은 동시에 성립하지 않음:</strong>  
                             지상무효전력은 유도성 부하에서, 진상무효전력은 용량성 부하에서 발생하므로  
                             특정 시점에는 두 중 하나만 발생합니다. 전류가 전압보다 늦을 때는 지상, 빠를 때는 진상 상태입니다.</li><br>
+
+                        <li><strong>탄소배출량과 전기 요금의 관계:</strong>  
+                            탄소배출량(tCO₂)은 전기요금에 직접적으로 영향을 주는 요인에 포함되지 않습니다. 그러나 전력사용량이 증가하면 전기요금뿐 아니라 탄소배출량도 함께 증가하기 때문에, 탄소배출량과 전기요금 간에 높은 상관계수가 나타나는 착시 현상이 발생할 수 있습니다.
                         </ul>
                     </div>
                     """),
@@ -410,15 +392,35 @@ app_ui = ui.TagList(
             ),
 
             # [C] 실시간 그래프 (전력 + 요금)
-            ui.card(
-                ui.card_header("[C] 12월 실시간 전력사용량 및 전기요금"),
-                ui.output_ui("latest_info_tags"),
-                ui.output_plot("live_plot", height="500px")
+            ui.layout_columns(
+                ui.card(
+                    ui.card_header("[C] 12월 실시간 전력사용량 및 전기요금"),
+                    ui.output_ui("latest_info_tags"),
+                    ui.output_plot("live_plot", height="500px")
+                ),
+                ui.card(
+                        ui.card_header("[B] 전 기간과 비교"),  # ✅ 제목만 header에!
+
+                        ui.div(  # ✅ 카드 본문 좌측 상단에 select 위치
+                            ui.tags.label("월 선택", class_="me-2"),
+                            ui.input_select(
+                                "비교월", None,
+                                choices=[str(i) for i in range(1, 12)],
+                                selected="11",
+                                width="100px"
+                            ),
+                            class_="d-flex align-items-center",
+                            style="margin-left: 10px; margin-bottom: 10px;"  # 여백 조절
+                        ),
+                        ui.output_ui("card_b"),  # 그래프 등 주요 콘텐츠
+                        style="margin-bottom: 10px; padding-bottom: 0px;"
+                    ),
+                    col_widths=[7, 5]
             ),
         ),
 
         # page_navbar 옵션
-        title="피카피카",
+        title="",
         id="page"
     )
 )
@@ -1192,6 +1194,112 @@ def server(input, output, session):
     ################################
     # [B] 
     ################################
+    @output
+    @render.ui
+    def card_b():
+        return ui.output_image("compare_bar")
+    
+    @output
+    @render.image
+    def compare_bar():
+        reactive.invalidate_later(3)
+        
+        streamer_obj = streamer.get()
+        df_stream = streamer_obj.get_data()
+
+        if df_stream.empty or df_stream["측정일시"].isna().all():
+            fig, ax = plt.subplots(figsize=(4, 2))
+            ax.axis("off")
+            ax.text(0.5, 0.5, "스트리밍 데이터 없음", ha='center', va='center', fontsize=11, color='gray')
+            tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+            plt.savefig(tmpfile.name, format="png")
+            plt.close(fig)
+            return {"src": tmpfile.name, "alt": "스트리밍 데이터 없음"}
+
+        latest_day = df_stream["측정일시"].max()
+        current_weekday = latest_day.strftime("%A")
+
+        weekday_map = {
+            "Monday": "월", "Tuesday": "화", "Wednesday": "수",
+            "Thursday": "목", "Friday": "금", "Saturday": "토", "Sunday": "일"
+        }
+        요일 = weekday_map.get(current_weekday, "")
+        비교월 = int(input.비교월())
+
+        # 기준 데이터: 해당 월의 동일 요일만 필터링
+        df_ref = train[
+            (train["월"] == 비교월) &
+            (train["측정일시"].dt.dayofweek == latest_day.dayofweek)
+        ].copy()
+
+        if df_ref.empty:
+            fig, ax = plt.subplots(figsize=(4, 2))
+            ax.axis("off")
+            ax.text(0.5, 0.5, f"{비교월}월 {요일} 데이터 없음", ha='center', va='center', fontsize=11, color='gray')
+            tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+            plt.savefig(tmpfile.name, format="png")
+            plt.close(fig)
+            return {"src": tmpfile.name, "alt": f"{비교월}월 {요일} 데이터 없음"}
+
+        # 하루 단위 총합 후 평균
+        df_ref["날짜"] = df_ref["측정일시"].dt.date
+        df_grouped = df_ref.groupby("날짜")[["전기요금(원)", "전력사용량(kWh)"]].sum()
+
+        ref_cost = df_grouped["전기요금(원)"].mean()
+        ref_usage = df_grouped["전력사용량(kWh)"].mean()
+
+        # 실시간 누적
+        df_stream["날짜"] = df_stream["측정일시"].dt.date
+        stream_cost = df_stream["예측_전기요금"].sum()
+        stream_usage = df_stream["예측_전력사용량"].sum()
+
+        # 비율 계산
+        cost_ratio = (stream_cost / ref_cost) * 100 if ref_cost > 0 else 0
+        usage_ratio = (stream_usage / ref_usage) * 100 if ref_usage > 0 else 0
+
+        # 그래프
+        fig, ax = plt.subplots(2, 2, figsize=(6.5, 4.5), gridspec_kw={'height_ratios': [3, 1]})
+        colors = ["#B3D7FF", "#FF9999"]
+##########################################구교빈 시작
+
+        # ─ 1행: 막대그래프
+        label_기준 = f"기준({비교월}월 {요일}요일 평균)"
+        label_실시간 = "실시간"
+        bars1 = ax[0, 0].bar([label_기준, label_실시간], [ref_cost, stream_cost], color=colors)
+        ax[0, 0].set_title("전기요금 비교")
+        ax[0, 0].set_ylabel("원")
+        ax[0, 0].set_ylim(0, max(ref_cost, stream_cost) * 1.2)
+        for bar in bars1:
+            height = bar.get_height()
+            ax[0, 0].text(bar.get_x() + bar.get_width()/2, height,
+                        f"{height:,.0f}원", ha='center', va='bottom', fontsize=9)
+
+        
+        bars2 = ax[0, 1].bar([label_기준, label_실시간], [ref_usage, stream_usage], color=colors)
+        ax[0, 1].set_title("전력사용량 비교")
+        ax[0, 1].set_ylabel("kWh")
+        ax[0, 1].set_ylim(0, max(ref_usage, stream_usage) * 1.2)
+        for bar in bars2:
+            height = bar.get_height()
+            ax[0, 1].text(bar.get_x() + bar.get_width()/2, height,
+                        f"{height:,.2f}kWh", ha='center', va='bottom', fontsize=9)
+
+        # ─ 2행: 텍스트 (각 subplot에 글자만 표시)
+        ax[1, 0].axis("off")
+        ax[1, 1].axis("off")
+        ax[1, 0].text(0.5, 0.5, f"현재 요금은 기준의 {cost_ratio:.1f}%", ha='center', va='center', fontsize=10)
+        ax[1, 1].text(0.5, 0.5, f"현재 사용량은 기준의 {usage_ratio:.1f}%", ha='center', va='center', fontsize=10)
+
+        fig.suptitle(f"오늘은 {요일}요일입니다", fontsize=12, y=1.02)
+        fig.tight_layout()
+
+        tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+        plt.savefig(tmpfile.name, format="png", bbox_inches='tight')
+        plt.close(fig)
+
+        return {"src": tmpfile.name, "alt": "요일 비교 막대그래프",
+                "style": "width: 100%; max-width: 600px; height: 400px; display: block; margin-left: auto; margin-right: auto;"}
+    
     # @output
     # @render.ui
     # def card_b():
@@ -1400,11 +1508,18 @@ def server(input, output, session):
 
 
 
+    @output
+    @render.ui
+    def my_image():
+        return ui.HTML("""
+        <img src="img.png" style="max-width: 100%; height: auto;">
+        """)
+
 
 
 
 ##############
 # 5. 앱 실행
 ##############
-app = App(app_ui, server)
+app = App(app_ui, server, static_assets=STATIC_DIR)
 
