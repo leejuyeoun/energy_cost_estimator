@@ -420,7 +420,7 @@ app_ui = ui.TagList(
         ),
 
         # page_navbar 옵션
-        title="",
+        title="전기요금 분석 및 예측 대시보드",
         id="page"
     )
 )
