@@ -417,6 +417,97 @@ app_ui = ui.TagList(
                     col_widths=[7, 5]
             ),
         ),
+            ui.nav_panel("부록",
+                ui.page_fluid(
+                    ui.h2("모델 비교 및 전처리 전략"),
+
+                    ui.HTML("""
+                    <style>
+                        table {
+                            width: 100%;
+                            border-collapse: collapse;
+                            margin-top: 20px;
+                            font-size: 15px;
+                        }
+                        th, td {
+                            border: 1px solid #ddd;
+                            padding: 8px;
+                            text-align: left;
+                            vertical-align: top;
+                        }
+                        th {
+                            background-color: #f2f2f2;
+                            font-weight: bold;
+                            width: 20%;
+                        }
+                        caption {
+                            caption-side: top;
+                            font-size: 16px;
+                            font-weight: bold;
+                            margin-bottom: 10px;
+                        }
+                    </style>
+
+                    <table>
+                        <caption>1. 전처리 과정 (Preprocessing)</caption>
+                        <tr><th>시간 파생 변수</th><td>month, day, hour, minute, dayofweek, is_winter, is_mon_sun, is_holiday, working</td></tr>
+                        <tr><th>작업유형 처리</th><td>get_dummies()로 One-Hot 인코딩</td></tr>
+                        <tr><th>특별 휴일 지정</th><td>설날(2/14~18), 추석(9/22~26), 여름휴가(8/1~5)</td></tr>
+                        <tr><th>요일 오류 보정</th><td>1~2월은 dayofweek +1 % 7</td></tr>
+                        <tr><th>결측 컬럼 보정</th><td>RandomForest/CatBoost로 train 기반 예측 → test에 채움</td></tr>
+                    </table>
+                    
+                    <table>
+                        <caption>2. CatBoostRegressor</caption>
+                        <tr><th>기술</th><td>범주형 자동 처리 + 부스팅</td></tr>
+                        <tr><th>장점</th><td>문자열 그대로 입력 가능, 빠르고 성능 우수</td></tr>
+                        <tr><th>단점</th><td>용량 큼</td></tr>
+                        <tr><th>주요 파라미터</th><td>iterations, depth, learning_rate, cat_features</td></tr>
+                    </table>
+                    
+                    <table>
+                        <caption>2-2. RandomForestRegressor</caption>
+                        <tr><th>기술</th><td>배깅(Bagging) 기반 트리 앙상블</td></tr>
+                        <tr><th>장점</th><td>과적합에 강하고, 변수 중요도 해석 가능</td></tr>
+                        <tr><th>단점</th><td>트리 개수가 많으면 예측 속도 느림</td></tr>
+                        <tr><th>주요 파라미터</th><td>n_estimators, max_depth, random_state, max_features</td></tr>
+                    </table>
+
+                    <table>
+                        <caption>3. GradientBoostingRegressor</caption>
+                        <tr><th>모듈</th><td>scikit-learn</td></tr>
+                        <tr><th>기술</th><td>트리 기반 앙상블 부스팅</td></tr>
+                        <tr><th>장점</th><td>구조가 직관적, 파이프라인 통합 쉬움</td></tr>
+                        <tr><th>단점</th><td>범주형 데이터 인코딩 필요</td></tr>
+                        <tr><th>주요 파라미터</th><td>n_estimators, max_depth, learning_rate</td></tr>
+                    </table>
+
+                    
+
+                    <table>
+                        <caption>4. 앙상블 전략</caption>
+                        <tr><th>기반 모델</th><td>CatBoost(0.9), RandomForest(0.1)</td></tr>
+                    </table>
+
+                    <table>
+                        <caption>5. 로그 변환 전략</caption>
+                        <tr><th>적용 대상</th><td>Target(y)만 log1p → 예측 후 expm1로 복원</td></tr>
+                        <tr><th>Feature(X)</th><td>로그 변환 미적용</td></tr>
+                    </table>
+
+                    <table>
+                        <caption>6. 검증 전략</caption>
+                        <tr><th>Train 기간</th><td>2024년 1월 ~ 10월</td></tr>
+                        <tr><th>Validation</th><td>2024년 11월 (시간 기준 분리)</td></tr>
+                        <tr><th>평가지표</th><td>MAE (Mean Absolute Error)</td></tr>
+                    </table>
+
+                    <div style="margin-top: 20px; font-weight: bold;">
+                    #     전처리, 모델 학습, 앙상블까지 통합한 파이프라인을 구성하여 정확한 전기요금 예측을 달성하였습니다.
+                    # </div>
+                    """)
+                )
+            ),
 
         # page_navbar 옵션
         title="전기요금 분석 및 예측 대시보드",
