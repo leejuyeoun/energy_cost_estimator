@@ -14,7 +14,6 @@ import tempfile
 import matplotlib.ticker as ticker
 from shared import streaming_df, train
 
-
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 # 폰트 등록 (PDF 폰트용)
@@ -71,6 +70,12 @@ from shiny import ui
 
 app_ui = ui.TagList(
     ui.include_css(Path(__file__).parent / "styles.css"),
+    # 외부 부트스트랩 아이콘 로드 (직접 link 태그로)
+    ui.tags.link(
+        rel="stylesheet",
+        href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css"
+    ),
+
 
     ui.page_navbar(
         # [탭1] 1~11월 전기요금 분석
@@ -85,13 +90,136 @@ app_ui = ui.TagList(
             ),
 
             ui.layout_column_wrap(
-                ui.card("총 전력 사용량", ui.output_text("range_usage")),
-                ui.card("총 전기요금", ui.output_text("range_cost")),
-                ui.card("일평균 전력 사용량", ui.output_text("avg_usage")),
-                ui.card("일평균 전기요금", ui.output_text("avg_cost")),
+                # 카드 1: 총 전력 사용량
+                ui.card(
+                    ui.card_body(
+                        ui.tags.div(
+                            # 왼쪽 아이콘
+                            ui.tags.i(
+                                class_="bi bi-plug-fill",
+                                style=(
+                                    "flex:0 0 6rem; "          # 고정 너비 3rem
+                                    "font-size:5rem; "         # 아이콘 크기
+                                    "display:flex; "
+                                    "align-items:center; "
+                                    "justify-content:center;"
+                                )
+                            ),
+                            # 오른쪽 텍스트
+                            ui.tags.div(
+                                [
+                                    ui.tags.span("총 전력 사용량", class_="fw-bold"),
+                                    ui.tags.span(ui.output_text("range_usage"), class_="fw-bold", style="font-size:1.2rem;"),
+                                ],
+                                style=(
+                                    "margin-left:0.5rem; "
+                                    "display:flex; "
+                                    "flex-direction:column; "
+                                    "justify-content:center;"
+                                )
+                            ),
+                            style="display:flex; align-items:center; height:6rem;"
+                        )
+                    )
+                ),
+
+                # 카드 2: 총 전기요금
+                ui.card(
+                    ui.card_body(
+                        ui.tags.div(
+                            ui.tags.i(
+                                class_="bi bi-cash-stack",
+                                style=(
+                                    "flex:0 0 6rem; "
+                                    "font-size:5rem; "
+                                    "display:flex; "
+                                    "align-items:center; "
+                                    "justify-content:center;"
+                                )
+                            ),
+                            ui.tags.div(
+                                [
+                                    ui.tags.span("총 전기요금", class_="fw-bold"),
+                                    ui.tags.span(ui.output_text("range_cost"), class_="fw-bold", style="font-size:1.2rem;"),
+                                ],
+                                style=(
+                                    "margin-left:0.5rem; "
+                                    "display:flex; "
+                                    "flex-direction:column; "
+                                    "justify-content:center;"
+                                )
+                            ),
+                            style="display:flex; align-items:center; height:6rem;"
+                        )
+                    )
+                ),
+
+                # 카드 3: 일평균 전력 사용량
+                ui.card(
+                    ui.card_body(
+                        ui.tags.div(
+                            ui.tags.i(
+                                class_="bi bi-bar-chart-line",
+                                style=(
+                                    "flex:0 0 6rem; "
+                                    "font-size:5rem; "
+                                    "display:flex; "
+                                    "align-items:center; "
+                                    "justify-content:center;"
+                                )
+                            ),
+                            ui.tags.div(
+                                [
+                                    ui.tags.span("일평균 전력 사용량", class_="fw-bold"),
+                                    ui.tags.span(ui.output_text("avg_usage"), class_="fw-bold", style="font-size:1.2rem;"),
+                                ],
+                                style=(
+                                    "margin-left:0.5rem; "
+                                    "display:flex; "
+                                    "flex-direction:column; "
+                                    "justify-content:center;"
+                                )
+                            ),
+                            style="display:flex; align-items:center; height:6rem;"
+                        )
+                    )
+                ),
+
+                # 카드 4: 일평균 전기요금
+                ui.card(
+                    ui.card_body(
+                        ui.tags.div(
+                            ui.tags.i(
+                                class_="bi bi-receipt",
+                                style=(
+                                    "flex:0 0 6rem; "
+                                    "font-size:5rem; "
+                                    "display:flex; "
+                                    "align-items:center; "
+                                    "justify-content:center;"
+                                )
+                            ),
+                            ui.tags.div(
+                                [
+                                    ui.tags.span("일평균 전기요금", class_="fw-bold"),
+                                    ui.tags.span(ui.output_text("avg_cost"), class_="fw-bold", style="font-size:1.2rem;"),
+                                ],
+                                style=(
+                                    "margin-left:0.5rem; "
+                                    "display:flex; "
+                                    "flex-direction:column; "
+                                    "justify-content:center;"
+                                )
+                            ),
+                            style="display:flex; align-items:center; height:6rem;"
+                        )
+                    )
+                ),
+
                 width=1/4,
                 gap="20px"
             ),
+
             ui.hr(),
 
 
@@ -715,9 +843,6 @@ def server(input, output, session):
         tmpfile.close()
         return {"src": tmpfile.name, "alt": "시간대별 작업유형별 전력사용량"}
 
-#####################################
-#  TAB1 F - 1일–31일 × 6구간 전력 사용량 추이 
-#####################################
     @output
     @render.plot
     def time_bin_plot():
@@ -770,6 +895,7 @@ def server(input, output, session):
         plt.tight_layout()
 
         return fig
+
 
 # ===============================
 # TAB2 서버 로직
@@ -1018,6 +1144,9 @@ def server(input, output, session):
 ##############
 # 5. 앱 실행
 ##############
+app = App(app_ui, server)
+
+
 app = App(app_ui, server)
 
 
