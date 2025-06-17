@@ -101,28 +101,46 @@ app_ui = ui.TagList(
         ui.nav_panel(
             "1~11월 전기요금 분석",
 
-            ui.layout_columns(
-                ui.input_date_range("기간", "기간 선택", start="2024-01-01", end="2024-01-15"),
-                # 오른쪽 영역: 월 선택 + PDF 다운로드 버튼 나란히
-                ui.div(
-                    ui.div(
-                        ui.input_select(
-                            "pdf_month", "월 선택:",
-                            choices=[str(m) for m in sorted(train["월"].unique())],
-                            selected="1",           
+        ui.layout_columns(
+                        ui.input_date_range("기간", "기간 선택", start="2024-01-01", end="2024-01-15"),
+
+                        ui.div(
+                            ui.tags.div(
+                                [
+                                    # "분석 월 선택 :" 라벨과 드롭다운을 수평 정렬
+                                    ui.tags.div(
+                                        [
+                                            ui.tags.label("분석 월 선택 :", style="margin: 0 3px 15px 0; font-size: 16px;"),
+                                            ui.input_select(
+                                                "pdf_month", "",
+                                                choices=[str(m) for m in sorted(train["월"].unique())],
+                                                selected="1",
+                                                width="100px"
+                                            )
+                                        ],
+                                        style="display: flex; align-items: center; margin-right: 10px; margin-top:10px;"
+                                    ),
+
+                                    # 다운로드 버튼
+                                    ui.download_button(
+                                        "download_pdf", "분석보고서 PDF 다운로드",
+                                        class_="btn btn-primary",
+                                        style="height: 40px; font-weight: bold; padding: 6px 20px;"
+                                    )
+                                ],
+                                style="""
+                                    display: flex;
+                                    align-items: center;
+                                    justify-content: flex-end;
+                                    flex-wrap: nowrap;
+                                    gap: 20px;
+                                """
+                            ),
+                            style="width: 100%;"
                         ),
-                        style="width: 80px; margin-right: 8px;"
+
+                        col_widths=[6, 6]
                     ),
-                    ui.download_button(
-                        "download_pdf", "PDF 다운로드",
-                        class_="btn btn-warning",
-                        style="display: inline-block; margin-top: 25px; width: 140px;"
-                    ),
-                    style="display: flex; align-items: flex-end; gap: 5px;"
-                        "justify-content: flex-end; width: 100%;"
-                ),
-                col_widths=[6, 6],
-            ),
 
             ui.layout_column_wrap(
                 # 카드 1: 총 전력 사용량
@@ -733,14 +751,12 @@ def server(input, output, session):
         선택월 = input.선택월()
         단위 = input.단위()
 
-        # '월' 단위가 아닌 경우에만 월 필터 적용
         if 단위 != "월" and 선택월 != "전체(1~11)":
             df = df[df['월'] == int(선택월)]
 
         if 단위 == "월":
             df['월'] = df['측정일시'].dt.month
             df['구분'] = df['월'].astype(str) + "월"
-
             grouped = (
                 df.groupby(['구분'])[['전력사용량(kWh)', '전기요금(원)']]
                 .sum()
@@ -785,14 +801,18 @@ def server(input, output, session):
                 .reset_index()
             )
 
-        # 숫자 포맷 적용
+        # ✅ 단가(원/kWh) 컬럼 추가
+        grouped['단가(원/kWh)'] = grouped['전기요금(원)'] / grouped['전력사용량(kWh)']
+        grouped['단가(원/kWh)'] = grouped['단가(원/kWh)'].replace([float('inf'), float('nan')], 0)
+
+        # ✅ 숫자 포맷
         grouped['전력사용량(kWh)'] = grouped['전력사용량(kWh)'].apply(lambda x: f"{x:,.2f}")
         grouped['전기요금(원)'] = grouped['전기요금(원)'].apply(lambda x: f"{x:,.0f}")
-        grouped = grouped[['구분', '전력사용량(kWh)', '전기요금(원)']]
+        grouped['단가(원/kWh)'] = grouped['단가(원/kWh)'].apply(lambda x: f"{x:,.2f}")
 
-        # HTML 테이블 출력
+        grouped = grouped[['구분', '전력사용량(kWh)', '전기요금(원)', '단가(원/kWh)']]
+
         html = grouped.to_html(index=False, classes="table table-striped", escape=False, border=0)
-
         custom_style = """
         <style>
             .table th, .table td {
