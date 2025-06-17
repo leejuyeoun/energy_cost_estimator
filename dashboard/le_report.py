@@ -1,4 +1,6 @@
-def le_report(train, selected_month, font_path="C:/Windows/Fonts/malgun.ttf"):
+import os
+font_path = os.path.join(os.path.dirname(__file__), "www", "malgun.ttf")
+def le_report(train, selected_month, font_path=font_path):
     import io
     import matplotlib.pyplot as plt
     import matplotlib as mpl
@@ -12,9 +14,10 @@ def le_report(train, selected_month, font_path="C:/Windows/Fonts/malgun.ttf"):
     import matplotlib.ticker as mticker
     import pandas as pd
     import numpy as np
+    import os
 
     # 한글 폰트 등록
-    pdfmetrics.registerFont(TTFont('MalgunGothic', 'C:/Windows/Fonts/malgun.ttf'))
+    pdfmetrics.registerFont(TTFont('MalgunGothic', font_path))
     mpl.rc('font', family='Malgun Gothic')
     mpl.rcParams['axes.unicode_minus'] = False
 
