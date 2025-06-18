@@ -267,14 +267,24 @@ app_ui = ui.TagList(
             ui.hr(),
 
             ui.card(
-                ui.card_header("전기요금 산정방식 마인드맵", style="font-size: 1.1rem;"),
-                ui.layout_columns(
-                    # ────── 좌측: Mermaid 마인드맵 ──────
-                    ui.output_ui("my_image"),
-
-                    # ────── 우측: 설명 ──────
-                    ui.HTML("""
-                    <div style="font-size: 16px; padding: 16px;">
+                ui.card_header(
+                    ui.div(
+                        [
+                            ui.tags.span("전기요금 산정방식 마인드맵", style="font-size: 1.1rem;"),
+                            ui.tags.button(
+                                "접기/펼치기",
+                                id="toggle_button",
+                                class_="btn btn-sm btn-outline-primary ms-auto"
+                            )
+                        ],
+                        class_="d-flex align-items-center justify-content-between"
+                    )
+                ),
+                ui.div(
+                    ui.layout_columns(
+                        ui.output_ui("my_image"),
+                        ui.HTML("""
+                        <div style="font-size: 16px; padding: 16px;">
                         <ul>
                         <li><strong>피상전력 관계식:</strong> S² = P² + Q²  
                             피상전력(S)은 유효전력(P)과 무효전력(Q)의 벡터 합으로, 전기설비가 실제로 부담하는 전체 전력량을 나타냅니다.</li><br>
@@ -291,11 +301,25 @@ app_ui = ui.TagList(
                             탄소배출량(tCO₂)은 전기요금에 직접적으로 영향을 주는 요인에 포함되지 않습니다. 그러나 전력사용량이 증가하면 전기요금뿐 아니라 탄소배출량도 함께 증가하기 때문에, 탄소배출량과 전기요금 간에 높은 상관계수가 나타나는 착시 현상이 발생할 수 있습니다.
                         </ul>
                     </div>
-                    """),
-
-                    col_widths=[6, 6]
+                        """),
+                        col_widths=[6, 6]
+                    ),
+                    id="card_toggle_body",
+                    style="display: flex;"
                 )
             ),
+            # 
+            ui.tags.script("""
+            document.addEventListener("DOMContentLoaded", function() {
+                const btn = document.getElementById("toggle_button");
+                const content = document.getElementById("card_toggle_body");
+                if (btn && content) {
+                    btn.addEventListener("click", function() {
+                        content.style.display = (content.style.display === 'none') ? 'flex' : 'none';
+                    });
+                }
+            });
+            """),
             ui.hr(),
     
            # B: Plotly 멀티라인 차트 추가
@@ -364,7 +388,7 @@ app_ui = ui.TagList(
 
         # [탭2] 12월 예측 및 모델 근거
         ui.nav_panel(
-            "12월 예측 및 모델 근거",
+            "12월 전기요금 예측",
             # ▶ 버튼 + 라디오 버튼 그룹 정렬
             ui.div(
                 ui.div(
@@ -745,7 +769,7 @@ def server(input, output, session):
                 bottoms += np.array(vals)
 
             total_by_hour = df.groupby('단위')['전기요금(원)'].sum().reindex(hours, fill_value=0)
-            ax2.plot(hours, total_by_hour.values, color='red', marker='o', label='전기요금')
+            ax2.plot(hours, total_by_hour.values, color='#ED1C24', marker='o', label='전기요금')
             
             ax1.set_xticks(hours)
             ax1.set_xlabel("시간")
@@ -768,8 +792,8 @@ def server(input, output, session):
             )
             fig, ax1 = plt.subplots()
             ax2 = ax1.twinx()
-            ax1.bar(요일순서, grouped['전력사용량(kWh)'], color='skyblue', label='전력 사용량')
-            ax2.plot(요일순서, grouped['전기요금(원)'], color='red', marker='o', label='전기요금')
+            ax1.bar(요일순서, grouped['전력사용량(kWh)'], color="#A6D5FA", label='전력 사용량')
+            ax2.plot(요일순서, grouped['전기요금(원)'], color='#ED1C24', marker='o', label='전기요금')
             handles1, labels1 = ax1.get_legend_handles_labels()
             handles2, labels2 = ax2.get_legend_handles_labels()
             ax1.legend(handles1 + handles2, labels1 + labels2, title="지표")
@@ -791,14 +815,14 @@ def server(input, output, session):
             fig, ax1 = plt.subplots()
             ax2 = ax1.twinx()
 
-            color_map = {'평일': 'skyblue', '주말': 'coral'}
+            color_map = {'평일': '#A6D5FA', '주말': '#F7B7A3'}
 
             for gubun in ['평일', '주말']:
                 sub = grouped[grouped['구분'] == gubun]
                 ax1.bar(sub['일'], sub['전력사용량(kWh)'], color=color_map[gubun], label=gubun)
 
             total_by_day = df.groupby('일')['전기요금(원)'].sum().sort_index()
-            ax2.plot(total_by_day.index, total_by_day.values, color='red', marker='o', label='전기요금')
+            ax2.plot(total_by_day.index, total_by_day.values, color='#ED1C24', marker='o', label='전기요금')
 
             ax1.set_xlabel("일")
             ax1.set_ylabel("전력 사용량 (kWh)")
@@ -911,11 +935,11 @@ def server(input, output, session):
                 .reset_index()
             )
 
-        # ✅ 단가(원/kWh) 컬럼 추가
+        # 단가(원/kWh) 컬럼 추가
         grouped['단가(원/kWh)'] = grouped['전기요금(원)'] / grouped['전력사용량(kWh)']
         grouped['단가(원/kWh)'] = grouped['단가(원/kWh)'].replace([float('inf'), float('nan')], 0)
 
-        # ✅ 숫자 포맷
+        # 숫자 포맷
         grouped['전력사용량(kWh)'] = grouped['전력사용량(kWh)'].apply(lambda x: f"{x:,.2f}")
         grouped['전기요금(원)'] = grouped['전기요금(원)'].apply(lambda x: f"{x:,.0f}")
         grouped['단가(원/kWh)'] = grouped['단가(원/kWh)'].apply(lambda x: f"{x:,.2f}")
@@ -1010,50 +1034,58 @@ def server(input, output, session):
  
 
     # [D][E] 대체: 월별 작업유형별 전력 사용량 및 비율 (표)
-    # 
     @output
     @render.image
     def usage_by_dayofweek_matplotlib():
         selected_month = int(input.selected_month())
+        selected_day = input.selected_day()   # 예: "월", "화", ... (추가로 인풋 받아야 함)
         df_month = train[train['월'] == selected_month].copy()
-
         dow_map = {0: "월", 1: "화", 2: "수", 3: "목", 4: "금", 5: "토", 6: "일"}
         df_month['요일'] = df_month['측정일시'].dt.dayofweek.map(dow_map)
 
-        # ✅ 고정 순서 및 색상 설정
         load_order = ["Light_Load", "Medium_Load", "Maximum_Load"]
         color_map = {
             "Light_Load": "#B3D7FF",
             "Medium_Load": "#FFEB99",
             "Maximum_Load": "#FF9999"
         }
-
-        # ✅ pivot 생성 및 순서 고정
         pivot = df_month.pivot_table(
             index='요일', columns='작업유형', values='전력사용량(kWh)', aggfunc='sum', fill_value=0
         ).reindex(list(dow_map.values())).fillna(0)
         pivot = pivot.reindex(columns=load_order, fill_value=0)
 
-        # ✅ 시각화
         fig, ax = plt.subplots(figsize=(7, 3))
         bottom = np.zeros(len(pivot))
 
         for col in load_order:
-            ax.bar(pivot.index, pivot[col], bottom=bottom, color=color_map[col], label=col)
-            for i, val in enumerate(pivot[col]):
-                if val > 2500:
-                    total = pivot.iloc[i].sum()
-                    ratio = (val / total * 100) if total > 0 else 0
+            y = pivot[col].values
+            for i, day in enumerate(pivot.index):
+                total = pivot.iloc[i].sum()
+                ratio = (y[i] / total * 100) if total > 0 else 0
+                # ✅ 요일 강조
+                edgecolor = 'royalblue' if day == selected_day else 'gray'
+                linewidth = 3 if day == selected_day else 1
+                alpha = 1.0 if day == selected_day else 0.4
+                ax.bar(
+                    day, y[i],
+                    bottom=bottom[i],
+                    color=color_map[col],
+                    edgecolor=edgecolor,
+                    linewidth=linewidth,
+                    alpha=alpha,
+                    label=col if i == 0 else ""
+                )
+                if y[i] > 2500:
                     ax.text(
-                        i, bottom[i] + val / 2,
-                        f"{int(val):,}\n({ratio:.1f}%)",
+                        day, bottom[i] + y[i] / 2,
+                        f"{int(y[i]):,}\n({ratio:.1f}%)",
                         ha='center', va='center', fontsize=8, color='black'
                     )
-            bottom += pivot[col].values
+            bottom += y
 
         ax.set_title(f"{selected_month}월 요일별 작업유형별 전력 사용량")
         ax.set_xlabel("요일")
-        ax.set_ylabel("전력사용량 (kWh)")  
+        ax.set_ylabel("전력사용량 (kWh)")
         ax.legend(title='작업유형')
         plt.tight_layout()
 

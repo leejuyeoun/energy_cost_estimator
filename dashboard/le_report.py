@@ -98,12 +98,13 @@ def month_time_bin_plot(df, selected_month):
     min_bin = timebin_mean.idxmin()
     min_val = timebin_mean.min()
 
-    explain_str = (
-        f"- 누적 기준 **'{peak_bin}'** 시간대에 전력 사용량이 평균적으로 가장 많았습니다. (평균 {peak_val:,.1f}kWh)\n"
-        f"- 사용량이 가장 많은 날은 **{peak_day}일**이며, 총 {peak_day_val:,.1f}kWh가 사용되었습니다.\n"
-        f"- 시간대별 최대/최소 평균값 차이는 {time_diff:,.1f}kWh ({peak_bin}: {peak_val:,.1f}kWh, {min_bin}: {min_val:,.1f}kWh)\n"
-        f"- 특정 시간대의 집중 패턴, 일별 피크 발생일 등 설비 운영/에너지 관리 인사이트 도출에 활용할 수 있습니다."
-    )
+    explain_lines = [
+        f"• 누적 기준 <b>'{peak_bin}'</b> 시간대에 전력 사용량이 평균적으로 가장 많음. (평균 <b>{peak_val:,.1f}kWh</b>)",
+        f"• 사용량이 가장 많은 날은 <b>{peak_day}일</b>이며, 총 <b>{peak_day_val:,.1f}kWh</b>가 사용됨.",
+        f"• 시간대별 최대/최소 평균값 차이는 <b>{time_diff:,.1f}kWh</b> (<b>{peak_bin}</b>: {peak_val:,.1f}kWh, <b>{min_bin}</b>: {min_val:,.1f}kWh)",
+        "• 특정 시간대의 집중 패턴, 일별 피크 발생일 등 설비 운영/에너지 관리 인사이트 도출에 활용할 수 있음."
+    ]
+    explain_str = "<br/>".join(explain_lines)
 
     return buf, explain_str
 
@@ -245,10 +246,10 @@ def le_report(train, selected_month, font_path=font_path):
     unit_day = by_dow["단가"].idxmax()
     unit_val = by_dow["단가"].max()
     dow_desc = [
-        f"평일 평균 사용량은 {mean_weekday:,.0f}kWh, 주말 평균은 {mean_weekend:,.0f}kWh입니다.",
-        f"전력사용량이 가장 많은 요일은 {max_day}요일({max_val:,.0f}kWh), 가장 적은 요일은 {min_day}요일({min_val:,.0f}kWh)입니다.",
-        f"요일별 최대/최소 사용량 차이는 {delta:,.0f}kWh입니다.",
-        f"가장 높은 단가의 요일은 {unit_day}요일({unit_val:,.0f}원/kWh)입니다."
+        f"평일 평균 사용량은 {mean_weekday:,.0f}kWh, 주말 평균은 {mean_weekend:,.0f}kWh.",
+        f"전력사용량이 가장 많은 요일은 {max_day}요일({max_val:,.0f}kWh), 가장 적은 요일은 {min_day}요일({min_val:,.0f}kWh).",
+        f"요일별 최대/최소 사용량 차이는 {delta:,.0f}kWh.",
+        f"가장 높은 단가의 요일은 {unit_day}요일({unit_val:,.0f}원/kWh)."
 ]
 
     buf1 = io.BytesIO()
@@ -324,27 +325,28 @@ def le_report(train, selected_month, font_path=font_path):
     main_type = type_cnt.idxmax()
     main_days = [d for d, t in most_type_kor.items() if t == main_type]
     main_days_str = ", ".join(main_days)
-    summary = [f"대부분 요일({main_days_str})은 '{main_type}'이 가장 높음."]
     exception_days = [d for d, t in most_type_kor.items() if t != main_type]
-    if exception_days:
-        exception_str = []
-        for d in exception_days:
-            kor = most_type_kor[d]
-            exception_str.append(f"{d}요일은 '{kor}'이 가장 높음")
-        summary.append(" / 예외: " + ", ".join(exception_str))
-    threshold = 0.6
     insights = []
+    threshold = 0.6
     for day in pivot.index:
         top_col = pivot.loc[day].idxmax()
         val = pivot.loc[day, top_col]
         total = pivot.loc[day].sum()
         ratio = val / total if total > 0 else 0
         if ratio >= threshold:
-            kor = top_col
-            insights.append(f"{day}요일은 '{kor}' 비중이 {ratio:.1%}로 매우 높음")
+            insights.append(f"{day}요일은 '{top_col}' 비중이 {ratio:.1%}로 매우 높았음.")
+
+    lines = []
+    lines.append(f"대부분 요일({main_days_str})은 '{main_type}'가 가장 높았음.")
+    if exception_days:
+        exception_str = []
+        for d in exception_days:
+            kor = most_type_kor[d]
+            exception_str.append(f"{d}요일은 '{kor}'가 가장 높았음.")
+        lines.append("예외: " + ", ".join(exception_str))
     if insights:
-        summary.append(" / 특징: " + "; ".join(insights))
-    explain_str = " ".join(summary)
+        lines.append("특징: " + "; ".join(insights))
+    explain_str = "<br/>".join(lines)
 
 
 # ====== PDF 빌드 ======
@@ -384,11 +386,7 @@ def le_report(train, selected_month, font_path=font_path):
     elems.append(Spacer(1, 12))
     elems.append(Paragraph("<b>■ 요일·작업유형별 전력사용량</b>", styles["BodyText"]))
     elems.append(Image(buf2, width=430, height=180))
-    explain_str = (
-        "대부분 요일(화, 수, 목, 금, 토, 일)은 '과부하'가 가장 높음.<br/>"
-        "예외: 월요일은 '경부하'가 가장 높음.<br/>"
-        "특징: 월요일은 '경부하' 비중이 70.7%로 매우 높음."
-    )
+    
     elems.append(Paragraph(f"<font size=9 color='black'>{explain_str}</font>", styles["BodyText"]))
 
     #  여기 바로 아래에 추가!
@@ -397,14 +395,7 @@ def le_report(train, selected_month, font_path=font_path):
         elems.append(Spacer(1, 14))
         elems.append(Paragraph(f"<b>■ 누적(1~{selected_month}월) 일자별 시간대(4시간)별 전력 사용량 추이</b>", styles["BodyText"]))
         elems.append(Image(timebin_buf, width=430, height=160))
-        explain_str = (
-        "<b>시간대별 전력 사용 인사이트</b><br/><br/>"
-        "• <b>08:01–12:00</b> 시간대에 전력 사용량이 가장 높음 (평균 <b>55.5kWh</b>)<br/>"
-        "• 일별 최대 사용일: <b>8일</b> (<b>206.4kWh</b>)<br/>"
-        "• 시간대별 최대-최소 평균차: <b>51.0kWh</b><br/>"
-        "• 전력 수요가 특정 시간대에 집중됨 – 설비 운영 및 에너지 관리 시 참고"
-        )
-        elems.append(Paragraph(explain_str, styles["BodyText"]))
+        elems.append(Paragraph(timebin_explain, styles["BodyText"]))
 
         
     doc.build(elems)
