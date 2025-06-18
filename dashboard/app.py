@@ -501,10 +501,8 @@ app_ui = ui.TagList(
                         <tr><th>Validation</th><td>2024년 11월 (시간 기준 분리)</td></tr>
                         <tr><th>평가지표</th><td>MAE (Mean Absolute Error)</td></tr>
                     </table>
+                    <hr>
 
-                    <div style="margin-top: 20px; font-weight: bold;">
-                    #     전처리, 모델 학습, 앙상블까지 통합한 파이프라인을 구성하여 정확한 전기요금 예측을 달성하였습니다.
-                    # </div>
                     """)
                 )
             ),
@@ -748,7 +746,7 @@ def server(input, output, session):
 
             total_by_hour = df.groupby('단위')['전기요금(원)'].sum().reindex(hours, fill_value=0)
             ax2.plot(hours, total_by_hour.values, color='red', marker='o', label='전기요금')
-
+            
             ax1.set_xticks(hours)
             ax1.set_xlabel("시간")
             ax1.set_ylabel("전력 사용량 (kWh)")
@@ -772,6 +770,9 @@ def server(input, output, session):
             ax2 = ax1.twinx()
             ax1.bar(요일순서, grouped['전력사용량(kWh)'], color='skyblue', label='전력 사용량')
             ax2.plot(요일순서, grouped['전기요금(원)'], color='red', marker='o', label='전기요금')
+            handles1, labels1 = ax1.get_legend_handles_labels()
+            handles2, labels2 = ax2.get_legend_handles_labels()
+            ax1.legend(handles1 + handles2, labels1 + labels2, title="지표")
             ax1.set_ylabel("전력 사용량 (kWh)")
             ax2.set_ylabel("전기요금 (원)")
             ax2.yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{int(x):,}"))
@@ -832,7 +833,9 @@ def server(input, output, session):
                     color='#B3D7FF', label='전력 사용량')  # pastel blue
             ax2.plot(grouped['단위'], grouped['전기요금(원)'],
                     color='#ED1C24', marker='o', label='전기요금')  # strong red
-
+            handles1, labels1 = ax1.get_legend_handles_labels()
+            handles2, labels2 = ax2.get_legend_handles_labels()
+            ax1.legend(handles1 + handles2, labels1 + labels2, title="지표")
             ax1.set_ylabel("전력 사용량 (kWh)")
             ax2.set_ylabel("전기요금 (원)")
             ax2.yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{int(x):,}"))
